@@ -12,5 +12,5 @@
 -compile(export_all).
 
 start() ->
-    ok.
+    Wx = wx:new().
 
