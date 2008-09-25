@@ -20,8 +20,14 @@ create_window(Wx) ->
     Frame = wxFrame:new(Wx, ?wxID_ANY, "Calculatior", []),
 
     Panel = wxPanel:new(Frame, []),
+    MainSz = wxBoxSizer:new(?wxVERTICAL),
 
-    create_buttons(Panel),
+    Buttons = create_buttons(Panel),
+
+    lists:foreach(fun(Button) ->
+			  wxSizer:add(MainSz, Button)
+		  end,
+		  Buttons),
 
     wxFrame:show(Frame).
 
@@ -48,27 +54,23 @@ create_buttons(Panel) ->
 		[Button | Acc]
 	end,
 
-    MainSz = wxBoxSizer:new(?wxVERTICAL),
     Row1 = wxBoxSizer:new(?wxHORIZONTAL),
-    Buttons1 = lists:foldl(Fun, [], List1),
+    Buttons1 = lists:foldr(Fun, [], List1),
     lists:foreach(fun(Button) ->
 			  wxSizer:add(Row1, Button)
 		  end, Buttons1),
     
     Row2 = wxBoxSizer:new(?wxHORIZONTAL),
-    Buttons2 = lists:foldl(Fun, [], List2),
+    Buttons2 = lists:foldr(Fun, [], List2),
     lists:foreach(fun(Button) ->
 			  wxSizer:add(Row2, Button)
 		  end, Buttons2),
     
     Row3 = wxBoxSizer:new(?wxHORIZONTAL),
-    Buttons3 = lists:foldl(Fun, [], List3),
+    Buttons3 = lists:foldr(Fun, [], List3),
     lists:foreach(fun(Button) ->
 			  wxSizer:add(Row3, Button)
 		  end, Buttons3),
-    
-    wxSizer:add(MainSz, Row1),
-    wxSizer:add(MainSz, Row2),
-    wxSizer:add(MainSz, Row3),
-    
-    {MainSz, lists:flatten([Buttons1, Buttons2, Buttons3])}.
+        
+%%    lists:flatten([Buttons1, Buttons2, Buttons3])
+    [Row1, Row2, Row3].
