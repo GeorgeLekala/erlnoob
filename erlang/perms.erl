@@ -1,6 +1,10 @@
 -module(perms).
 
--export([perms/1]).
+-export([ok/1, perms/1]).
+
+ok(String) ->
+    List = perms(String),
+    io:format("~p\n", [List]).
 
 perms([]) -> [ [] ];
 perms(List) ->
