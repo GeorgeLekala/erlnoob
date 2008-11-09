@@ -13,14 +13,10 @@
 
 -include_lib("wx/include/wx.hrl").
 -include_lib("wx/include/gl.hrl").
+-include("snake.hrl").
 
--record(state, {frame,
-		canvas,
-		deg,
-		speed = 2.0}).
 
--define(NEW, 1).
--define(QUIT, 2 ).
+-define(GRID_ID, 1).
 
 -define(TRIVIAL, 10).
 -define(EASY, 11).
@@ -32,32 +28,13 @@
 -define(ABOUT, 21).
 
 
--define(VS, {{ 0.5,  0.5, -0.5},  %1
-	     { 0.5, -0.5, -0.5},  %2
-	     {-0.5, -0.5, -0.5},   
-	     {-0.5,  0.5, -0.5},  %4
-	     {-0.5,  0.5,  0.5},
-	     { 0.5,  0.5,  0.5},  %6
-	     { 0.5, -0.5,  0.5}, 
-	     {-0.5, -0.5,  0.5}}).%8
-
--define(FACES, 
-	%% Faces      Normal     U-axis     V-axis 
-	[{{1,2,3,4},  { 0, 0,-1},  {-1,0, 0},  {0,1,0}},  % 
-	 {{3,8,5,4},  {-1, 0, 0},  { 0,0, 1},  {0,1,0}},  %
-	 {{1,6,7,2},  { 1, 0, 0},  { 0,0,-1},  {0,1,0}},  %
-	 {{6,5,8,7},  { 0, 0, 1},  { 1,0, 0},  {0,1,0}},  %
-	 {{6,1,4,5},  { 0, 1, 0},  {-1,0, 0},  {0,0,1}},  %
-	 {{7,8,3,2},  { 0,-1, 0},  { 1,0, 0},  {0,0,1}}]).
-
-
-
 init() ->
     Wx = wx:new(),
-    {Frame, Canvas} = wx:batch(fun() -> create_window(Wx) end),
-    loop(#state{frame = Frame,
-		canvas = Canvas,
-		deg = 1.0}).
+    State = wx:batch(fun() -> create_window(Wx) end),
+%%     Pid = spawn_link(fun() -> init_refresh_grid(State) end),
+    {ok, Timer} = timer:send_interval(State#state.speed, State#state.main_window_pid, update),
+
+    loop(State#state{timer = Timer}).
 
 
 create_window(Wx) ->
@@ -65,7 +42,7 @@ create_window(Wx) ->
     wxFrame:createStatusBar(Frame,[]),
     wxFrame:connect(Frame, close_window, [{skip, true}]),
 
-%%    Panel = wxPanel:new(Frame, []),
+    Panel = wxPanel:new(Frame, []),
     
     %% Menu bar
     MenuBar = wxMenuBar:new(),
@@ -73,9 +50,9 @@ create_window(Wx) ->
     Opt     = wxMenu:new([]),
     Help    = wxMenu:new([]),
 
-    wxMenu:append(File, ?NEW,  "New Game"),
+    wxMenu:append(File, ?wxID_NEW,  "New Game"),
     wxMenu:appendSeparator(File),    
-    wxMenu:append(File, ?QUIT, "&Quit Game"),
+    wxMenu:append(File, ?wxID_EXIT, "Exit Game"),
 
     wxMenu:append(Help, ?RULES, "Rules"),
     wxMenu:append(Help, ?ABOUT, "About"), 
@@ -97,81 +74,219 @@ create_window(Wx) ->
 
     MainSz = wxBoxSizer:new(?wxVERTICAL),
 
-    Canvas = wxGLCanvas:new(Frame, [{size, {300, 200}},
-				    {attribList, [?WX_GL_RGBA,?WX_GL_DOUBLEBUFFER,0]}]),
+    State = create_grid(#state{panel = Panel,
+			       frame = Frame,
+			       main_sizer = MainSz}),
 
-    wxSizer:add(MainSz, Canvas, []), 
-    
-    wxWindow:setSizer(Frame,MainSz),
-    wxSizer:setSizeHints(MainSz,Frame),
+    StatusBar = wxFrame:createStatusBar(Frame,[]),
+    wxFrame:setStatusText(State#state.frame, "Score: 0"),
+
     wxWindow:show(Frame),
 
-    wxGLCanvas:setCurrent(Canvas),
+    State#state{frame = Frame,
+		panel = Panel,
+		status_bar = StatusBar}.
 
-    initGL(Frame, Canvas),
-    {Frame, Canvas}.
+
+create_grid(State = #state{panel = Panel,
+		   frame = Frame,
+		   main_sizer = MainSz}) ->
+    Nrows = 30,
+    Ncols = 30,
+    Grid = wxGrid:new(Panel, ?GRID_ID, [{size, {-1, -1}}]),
+    wxGrid:createGrid(Grid, Nrows, Ncols, []),
+    [wxGrid:setColSize(Grid, Row, 17) || Row <- lists:seq(0, Ncols - 1)],
+    [wxGrid:setRowSize(Grid, Col, 15) || Col <- lists:seq(0, Nrows - 1)],
+    Borders = borders(Nrows, Ncols),
+    colour_borders(Grid, Borders),
+
+    wxGrid:setCellBackgroundColour(Grid, Nrows div 2, Ncols - (Ncols div 2), ?wxBLACK),
+    wxGrid:setCellBackgroundColour(Grid, Nrows div 2, Ncols - (Ncols div 2) +1, ?wxBLACK),
+    wxGrid:setCellBackgroundColour(Grid, Nrows div 2, Ncols - (Ncols div 2) -1, ?wxBLACK),
+
+    {Row, Col} = snake_logics:get_random_apple(Nrows, Ncols),
+    wxGrid:setCellBackgroundColour(Grid, Row, Col, ?wxRED),
+
+    Click = fun(Type) -> wxGrid:connect(Grid, Type, [{callback, fun() -> ok end}]) end,
+    lists:foreach(Click, [grid_cell_left_click, grid_cell_left_dclick,
+ 			  grid_cell_right_click, grid_cell_right_dclick,
+			  grid_cell_begin_drag]),
+    wxGrid:connect(Grid, key_down, []),
+    wxGrid:enableEditing(Grid, false),
+    wxGrid:setRowLabelSize(Grid, 0),
+    wxGrid:setColLabelSize(Grid, 0),
+    wxGrid:disableDragColSize(Grid),
+    wxGrid:disableDragRowSize(Grid),
+    Snake = #snake{head = [{Nrows div 2, Ncols - (Ncols div 2) -1}],
+		   tail = [{Nrows div 2, Ncols - (Ncols div 2) +1},
+			   {Nrows div 2, Ncols - (Ncols div 2)}]},
+    wxSizer:add(MainSz, Grid),
+    refresh_sizer(Frame, Panel, MainSz),
+    State#state{grid = Grid,
+		rows = Nrows,
+		cols = Ncols,
+		snake = Snake,
+		direction = left,
+		main_window_pid = self(),
+		apple_pos = {Row, Col}}.
+
+borders(Nrows, Ncols) ->
+    List1 = [{0, Col} || Col <- lists:seq(0, Ncols -1)],
+    List2 = [{Nrows -1, Col} || Col <- lists:seq(0, Ncols -1)],
+    List3 = [{Row, 0} || Row <- lists:seq(0, Nrows -1)],
+    List4 = [{Row, Ncols -1} || Row <- lists:seq(0, Nrows -1)],
+    lists:flatten([List1, List2, List3, List4]).
 
 
+
+colour_borders(Grid, Borders) ->
+    lists:foreach(fun({Row, Col}) ->
+			  wxGrid:setCellBackgroundColour(Grid, Row, Col, ?wxBLACK)
+		  end,
+		  Borders).
+
+refresh_sizer(Frame, Panel, Sizer) ->
+    wxSizer:layout(Sizer),
+    wxPanel:setSizer(Panel, Sizer),
+    wxSizer:fit(Sizer, Frame),
+    wxSizer:setSizeHints(Sizer, Frame),
+    wxWindow:refresh(Frame),
+    wxWindow:update(Frame).
+
+
+refresh_grid(State = #state{snake = Snake = #snake{head = Head = [{Row, Col} | _],
+						   tail = [Tail| Tail2]}}) ->
+    
+    {Head2, WhadDidIEat, ApplePos} =
+	case State#state.direction of
+	    left ->
+		wx:batch(fun() -> move_snake(State, {Row, Col -1}, Tail) end);
+	    right ->
+		wx:batch(fun() -> move_snake(State, {Row, Col +1}, Tail) end);
+	    up ->
+		wx:batch(fun() -> move_snake(State, {Row -1, Col}, Tail) end);
+	    down ->
+		wx:batch(fun() -> move_snake(State, {Row +1, Col}, Tail) end)
+	end,
+    wxWindow:refresh(State#state.frame),
+    case WhadDidIEat of
+	true ->
+	    NewScore = State#state.score +1,
+	    wxFrame:setStatusText(State#state.frame, "Score: " ++ integer_to_list(NewScore)),
+	    State#state{snake = Snake#snake{head = [Head2 | Head],
+					    tail = [Tail | Tail2]},
+			score = NewScore,
+			apple_pos = ApplePos};
+	false ->
+	    State#state{snake = Snake#snake{head = [Head2 | Head],
+					    tail = Tail2},
+			apple_pos = ApplePos};
+	game_over ->
+	    State
+    end.    
+
+
+move_snake(State = #state{grid = Grid, red = Red, white = White, black = Black},
+	   Head = {RowHead, ColHead}, Tail = {RowTail, ColTail}) ->
+    %%io:format("Head: ~p Tail: ~p\n", [Head, Tail]),
+    {DidIEat, ApplePos} =
+	case wxGrid:getCellBackgroundColour(Grid, RowHead, ColHead) of
+	    Red ->
+		%% Head
+		wxGrid:setCellBackgroundColour(Grid, RowHead, ColHead, Black),
+		{Row, Col} = snake_logics:get_random_apple(State#state.rows, State#state.cols),
+		wxGrid:setCellBackgroundColour(Grid, Row, Col, Red),
+		{true, {Row, Col}};
+	    White ->
+		%% Head
+		wxGrid:setCellBackgroundColour(Grid, RowHead, ColHead, Black),
+		%% Tail
+		wxGrid:setCellBackgroundColour(Grid, RowTail, ColTail, White),
+		{false, State#state.apple_pos};
+	    Black ->
+		State#state.main_window_pid ! game_over,
+		{game_over, State#state.apple_pos}
+	end,
+    {Head, DidIEat, ApplePos}.
+    
 loop(State) ->
     receive
+	update ->
+	    State2 = wx:batch(fun() -> refresh_grid(State) end),
+	    loop(check_tail(State2#state{mode = available}));
+	game_over ->
+	    timer:cancel(State#state.timer),
+	    Dialog = wxTextEntryDialog:new(State#state.frame, "Game Over!\n\nYour score:" ++
+					   integer_to_list(State#state.score) ++
+					   "\n\nEnter your name:"),
+	    wxTextEntryDialog:show(Dialog),
+	    loop(State#state{score = 0});
 	#wx{event = #wxClose{}} ->
+	    timer:cancel(State#state.timer),
 	    wx:destroy();
 	#wx{id = ?TRIVIAL} ->
-	    loop(State#state{speed = 1.0});
+	    State2 = new_game(State#state{speed = 300}),
+	    loop(State2);
 	#wx{id = ?EASY} ->
-	    loop(State#state{speed = 2.0});
+	    State2 = new_game(State#state{speed = 200}),
+	    loop(State2);
 	#wx{id = ?NORMAL} ->
-	    loop(State#state{speed = 3.0});
+	    State2 = new_game(State#state{speed = 120}),
+	    loop(State2);
 	#wx{id = ?HARD} ->
-	    loop(State#state{speed = 4.0});
+	    State2 = new_game(State#state{speed = 70}),
+	    snake_logics:hard_mode(State2),
+	    loop(State2);
 	#wx{id = ?HARDEST} ->
-	    loop(State#state{speed = 5.0});
+	    State2 = new_game(State#state{speed = 50}),
+	    loop(State2);
+	#wx{id = ?wxID_EXIT} ->
+	    timer:cancel(State#state.timer),
+	    wx:destroy();
+	#wx{id = ?wxID_NEW} ->
+	    State2 = new_game(State),
+	    loop(State2);
+	#wx{event = #wxKey{keyCode = KeyCode}} ->
+	    OldDirection = State#state.direction,
+	    NewDirection2 =
+		case State#state.mode of
+		    available ->
+			    if
+				KeyCode =:= ?WXK_LEFT, OldDirection =/= right -> left;
+				KeyCode =:= ?WXK_RIGHT, OldDirection =/= left -> right;
+				KeyCode =:= ?WXK_UP, OldDirection =/= down -> up;
+				KeyCode =:= ?WXK_DOWN, OldDirection =/= up -> down;
+				true -> OldDirection
+			    end;
+		    busy ->
+			OldDirection
+		end,		    
+	    loop(State#state{direction = NewDirection2,
+			     mode = busy});
 	Any ->
 	    io:format("~p\n", [Any]),
 	    loop(State)
-    after 20 ->
-	    draw2(State#state.deg, {?FACES,?VS}),
-	    wxGLCanvas:swapBuffers(State#state.canvas),
-	    loop(State#state{deg = State#state.deg - State#state.speed})
     end.
 
 
+new_game(State) ->
+    timer:cancel(State#state.timer),
+    wxGrid:destroy(State#state.grid),
+    State2 = create_grid(State),
+    wxGrid:setFocus(State2#state.grid),
+    {ok, Timer} = timer:send_interval(State2#state.speed, State2#state.main_window_pid, update),
+    State2#state{timer = Timer}.    
 
-initGL(Win,GLWin) ->
-    {W,H} = wxWindow:getClientSize(GLWin),
-    io:format("GL Window Size = ~p~n",[{W, H}]), 
-    io:format("Window Size = ~p~n",[wxWindow:getClientSize(Win)]),
-    gl:viewport(0, 0, W, H),
-    gl:matrixMode(?GL_PROJECTION),
-    gl:loadIdentity(),
-    %%gl:frustum( -2.0, 2.0, -2.0, 2.0, 5.0, 25.0 ),
-    gl:ortho( -2.0, 2.0, -2.0*H/W, 2.0*H/W, -20.0, 20.0),
-    gl:matrixMode(?GL_MODELVIEW),
-    gl:loadIdentity(),    
-    gl:enable(?GL_DEPTH_TEST),
-    gl:depthFunc(?GL_LESS),
-    {R,G,B,_} = wxWindow:getBackgroundColour(Win),
-    gl:clearColor(R/255,B/255,G/255,1.0).
-
-
-draw() ->
-    gl:drawPixels(20, 20, ?GL_RGB, ?GL_BYTE, 0).
-
-
-draw2(Deg,{Fs,Vs}) ->
-    gl:matrixMode(?GL_MODELVIEW),
-    gl:loadIdentity(),
-    gl:rotatef(Deg, -1.0, -1.0, 1.0),
-    gl:clear(?GL_COLOR_BUFFER_BIT bor ?GL_DEPTH_BUFFER_BIT),
-    gl:'begin'(?GL_QUADS),    
-    wx:foreach(fun(Face) -> drawFace(Face,Vs) end, Fs),
-    gl:'end'().
+check_tail(State = #state{snake = Snake}) ->
+    [H | T] = Snake#snake.head,
+    Snake2 =
+	case Snake#snake.tail of
+	    [] ->
+		Snake#snake{tail = lists:reverse(T),
+			    head = [H]};
+	    Any when is_list(Any)->
+		Snake
+	end,
+    State#state{snake = Snake2}.
 
 
-drawFace({{V1,V2,V3,V4},N={N1,N2,N3},_Ut,_Vt}, Cube) ->
-    gl:normal3fv(N),
-    gl:color3f(abs(N1),abs(N2),abs(N3)),
-    gl:texCoord2f(0.0, 1.0), gl:vertex3fv(element(V1, Cube)),
-    gl:texCoord2f(0.0, 0.0), gl:vertex3fv(element(V2, Cube)),
-    gl:texCoord2f(1.0, 0.0), gl:vertex3fv(element(V3, Cube)),
-    gl:texCoord2f(1.0, 1.0), gl:vertex3fv(element(V4, Cube)).
