@@ -11,4 +11,5 @@
 
 
 start() ->
-    spawn(snake_wxgui, init, []).
+    snake_wxgui:init().
+    %% spawn(snake_wxgui, init, []).
