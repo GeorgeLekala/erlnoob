@@ -44,3 +44,15 @@ hard_mode(#state{grid = Grid, rows = Rows, cols = Cols, black = Black}) ->
 
 color_square(Grid, {Row, Col}, Color) ->
     wxGrid:setCellBackgroundColour(Grid, Row, Col, Color).
+
+
+pause_game(State) ->
+    case State#state.timer of
+	undefined ->
+	    {ok, Timer} = timer:send_interval(State#state.speed,
+					      State#state.main_window_pid, update),
+	    State#state{timer = Timer};
+	_Timer ->
+	    timer:cancel(State#state.timer),
+	    State#state{timer = undefined}
+    end.

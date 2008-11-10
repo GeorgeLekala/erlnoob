@@ -91,8 +91,8 @@ create_window(Wx) ->
 create_grid(State = #state{panel = Panel,
 		   frame = Frame,
 		   main_sizer = MainSz}) ->
-    Nrows = 30,
-    Ncols = 30,
+    Nrows = 10,
+    Ncols = 10,
     Grid = wxGrid:new(Panel, ?GRID_ID, [{size, {-1, -1}}]),
     wxGrid:createGrid(Grid, Nrows, Ncols, []),
     [wxGrid:setColSize(Grid, Row, 17) || Row <- lists:seq(0, Ncols - 1)],
@@ -194,7 +194,7 @@ move_snake(State = #state{grid = Grid, red = Red, white = White, black = Black},
 	    Red ->
 		%% Head
 		wxGrid:setCellBackgroundColour(Grid, RowHead, ColHead, Black),
-		{Row, Col} = is_snake(State),
+		{Row, Col} = next_apple(State),
 		wxGrid:setCellBackgroundColour(Grid, Row, Col, Red),
 		{true, {Row, Col}};
 	    White ->
@@ -209,11 +209,11 @@ move_snake(State = #state{grid = Grid, red = Red, white = White, black = Black},
 	end,
     {Head, DidIEat, ApplePos}.
     
-is_snake(State = #state{black = Black, grid = Grid}) ->
+next_apple(State = #state{black = Black, grid = Grid}) ->
     {Row, Col} = snake_logics:get_random_apple(State#state.rows, State#state.cols),
     case wxGrid:getCellBackgroundColour(Grid, Row, Col) of
 	Black ->
-	    is_snake(State);
+	    next_apple(State);
 	_Any ->
 	    {Row, Col}
     end.
@@ -266,6 +266,12 @@ loop(State) ->
 				KeyCode =:= ?WXK_RIGHT, OldDirection =/= left -> right;
 				KeyCode =:= ?WXK_UP, OldDirection =/= down -> up;
 				KeyCode =:= ?WXK_DOWN, OldDirection =/= up -> down;
+				KeyCode =:= 80 ->
+				    State2 = snake_logics:pause_game(State),
+				    loop(State2);
+				KeyCode =:= 78 ->
+				    State2 = new_game(State),
+				    loop(State2);
 				true -> OldDirection
 			    end;
 		    busy ->
