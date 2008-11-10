@@ -91,8 +91,8 @@ create_window(Wx) ->
 create_grid(State = #state{panel = Panel,
 		   frame = Frame,
 		   main_sizer = MainSz}) ->
-    Nrows = 10,
-    Ncols = 10,
+    Nrows = 30,
+    Ncols = 30,
     Grid = wxGrid:new(Panel, ?GRID_ID, [{size, {-1, -1}}]),
     wxGrid:createGrid(Grid, Nrows, Ncols, []),
     [wxGrid:setColSize(Grid, Row, 17) || Row <- lists:seq(0, Ncols - 1)],
@@ -106,6 +106,8 @@ create_grid(State = #state{panel = Panel,
 
     {Row, Col} = snake_logics:get_random_apple(Nrows, Ncols),
     wxGrid:setCellBackgroundColour(Grid, Row, Col, ?wxRED),
+
+    wxGrid:enableGridLines(Grid, [{enable, false}]),
 
     Click = fun(Type) -> wxGrid:connect(Grid, Type, [{callback, fun() -> ok end}]) end,
     lists:foreach(Click, [grid_cell_left_click, grid_cell_left_dclick,
@@ -262,19 +264,33 @@ loop(State) ->
 		case State#state.mode of
 		    available ->
 			    if
-				KeyCode =:= ?WXK_LEFT, OldDirection =/= right -> left;
-				KeyCode =:= ?WXK_RIGHT, OldDirection =/= left -> right;
-				KeyCode =:= ?WXK_UP, OldDirection =/= down -> up;
-				KeyCode =:= ?WXK_DOWN, OldDirection =/= up -> down;
-				KeyCode =:= 80 ->
+				KeyCode =:= ?WXK_LEFT, OldDirection =/= right
+				-> left;
+				KeyCode =:= ?WXK_RIGHT, OldDirection =/= left
+				-> right;
+				KeyCode =:= ?WXK_UP, OldDirection =/= down ->
+				    up;
+				KeyCode =:= ?WXK_DOWN, OldDirection =/= up ->
+				    down;
+				KeyCode =:= 80 -> %P
 				    State2 = snake_logics:pause_game(State),
 				    loop(State2);
-				KeyCode =:= 78 ->
+				KeyCode =:= 78 -> %N
 				    State2 = new_game(State),
 				    loop(State2);
 				true -> OldDirection
 			    end;
 		    busy ->
+			if
+			    KeyCode =:= 80 -> %P
+				State2 = snake_logics:pause_game(State),
+				loop(State2);
+			    KeyCode =:= 78 -> %N
+				State2 = new_game(State),
+				loop(State2);
+			    true ->
+				ok
+			end,
 			OldDirection
 		end,		    
 	    loop(State#state{direction = NewDirection2,
@@ -291,7 +307,7 @@ new_game(State) ->
     State2 = create_grid(State),
     wxGrid:setFocus(State2#state.grid),
     {ok, Timer} = timer:send_interval(State2#state.speed, State2#state.main_window_pid, update),
-    State2#state{timer = Timer}.    
+    State2#state{timer = Timer, score = 0}.    
 
 check_tail(State = #state{snake = Snake}) ->
     [H | T] = Snake#snake.head,
