@@ -24,5 +24,5 @@ new(Parent) ->
     wxWindow:connect(Win, enter_window, [{skip, true}]),
  
     %% Init pens and fonts
-    Pen = wxPen:new({0,0,0}, [{width, 3}]),
+    Pen = wxPen:new({0,0,0}, [{width, 3}]).
 

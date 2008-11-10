@@ -194,7 +194,7 @@ move_snake(State = #state{grid = Grid, red = Red, white = White, black = Black},
 	    Red ->
 		%% Head
 		wxGrid:setCellBackgroundColour(Grid, RowHead, ColHead, Black),
-		{Row, Col} = snake_logics:get_random_apple(State#state.rows, State#state.cols),
+		{Row, Col} = is_snake(State),
 		wxGrid:setCellBackgroundColour(Grid, Row, Col, Red),
 		{true, {Row, Col}};
 	    White ->
@@ -209,6 +209,16 @@ move_snake(State = #state{grid = Grid, red = Red, white = White, black = Black},
 	end,
     {Head, DidIEat, ApplePos}.
     
+is_snake(State = #state{black = Black, grid = Grid}) ->
+    {Row, Col} = snake_logics:get_random_apple(State#state.rows, State#state.cols),
+    case wxGrid:getCellBackgroundColour(Grid, Row, Col) of
+	Black ->
+	    is_snake(State);
+	_Any ->
+	    {Row, Col}
+    end.
+
+
 loop(State) ->
     receive
 	update ->
