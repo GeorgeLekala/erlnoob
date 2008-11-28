@@ -18,11 +18,11 @@
 
 -define(GRID_ID, 1).
 
--define(TRIVIAL, 10).
--define(EASY, 11).
--define(NORMAL, 12).
--define(HARD, 13).
--define(HARDEST, 14).
+-define(TRIVIAL, 5).
+-define(EASY, 10).
+-define(NORMAL, 15).
+-define(HARD, 20).
+-define(HARDEST, 25).
 
 -define(RULES, 20).
 -define(ABOUT, 21).
@@ -32,10 +32,28 @@ init() ->
     Wx = wx:new(),
     State = wx:batch(fun() -> create_window(Wx) end),
 %%     Pid = spawn_link(fun() -> init_refresh_grid(State) end),
-    {ok, Timer} = timer:send_interval(State#state.speed, State#state.main_window_pid, update),
+    spawn_link(?MODULE, options_window, [State]),
+    loop(State).
 
-    loop(State#state{timer = Timer}).
+options_window(State) ->
+    Wx = wx:new(),
+    Frame = wxFrame:new(Wx, ?wxID_ANY, "Options", []),
+    Panel = wxPanel:new(Frame, []),
+    Sizer = wxBoxSizer:new(?wxVERTICAL),
+    List = 
+	[wxRadioButton:new(Panel, ?TRIVIAL, "Trivial"),
+	 wxRadioButton:new(Panel, ?EASY, "Easy"),
+	 wxRadioButton:new(Panel, ?NORMAL, "Normal"),
+	 wxRadioButton:new(Panel, ?HARD, "Hard"),
+	 wxRadioButton:new(Panel, ?HARDEST, "Hardest")],
+    
+    lists:foreach(fun(Item) ->
+			  wxSizer:add(Sizer, Item)
+		  end,
+		  List),
 
+    wxWindow:show(Frame),
+    State#state.main_window_pid ! {options, State}.
 
 create_window(Wx) ->
     Frame = wxFrame:new(Wx, ?wxID_ANY, "erlSnake", []),
@@ -173,7 +191,7 @@ refresh_grid(State = #state{snake = Snake = #snake{head = Head = [{Row, Col} | _
     wxWindow:refresh(State#state.frame),
     case WhadDidIEat of
 	true ->
-	    NewScore = State#state.score +1,
+	    NewScore = State#state.score + State#state.points,
 	    wxFrame:setStatusText(State#state.frame, "Score: " ++ integer_to_list(NewScore)),
 	    State#state{snake = Snake#snake{head = [Head2 | Head],
 					    tail = [Tail | Tail2]},
@@ -189,7 +207,7 @@ refresh_grid(State = #state{snake = Snake = #snake{head = Head = [{Row, Col} | _
 
 
 move_snake(State = #state{grid = Grid, red = Red, white = White, black = Black},
-	   Head = {RowHead, ColHead}, Tail = {RowTail, ColTail}) ->
+	   Head = {RowHead, ColHead}, {RowTail, ColTail}) ->
     %%io:format("Head: ~p Tail: ~p\n", [Head, Tail]),
     {DidIEat, ApplePos} =
 	case wxGrid:getCellBackgroundColour(Grid, RowHead, ColHead) of
@@ -237,20 +255,19 @@ loop(State) ->
 	    timer:cancel(State#state.timer),
 	    wx:destroy();
 	#wx{id = ?TRIVIAL} ->
-	    State2 = new_game(State#state{speed = 300}),
+	    State2 = new_game(State#state{speed = 300, points = ?TRIVIAL}),
 	    loop(State2);
 	#wx{id = ?EASY} ->
-	    State2 = new_game(State#state{speed = 200}),
+	    State2 = new_game(State#state{speed = 200, points = ?EASY}),
 	    loop(State2);
 	#wx{id = ?NORMAL} ->
-	    State2 = new_game(State#state{speed = 120}),
+	    State2 = new_game(State#state{speed = 120, points = ?NORMAL}),
 	    loop(State2);
 	#wx{id = ?HARD} ->
-	    State2 = new_game(State#state{speed = 70}),
-	    snake_logics:hard_mode(State2),
+	    State2 = new_game(State#state{speed = 70, points = ?HARD}),
 	    loop(State2);
 	#wx{id = ?HARDEST} ->
-	    State2 = new_game(State#state{speed = 50}),
+	    State2 = new_game(State#state{speed = 50, points = ?HARDEST}),
 	    loop(State2);
 	#wx{id = ?wxID_EXIT} ->
 	    timer:cancel(State#state.timer),
@@ -295,6 +312,9 @@ loop(State) ->
 		end,		    
 	    loop(State#state{direction = NewDirection2,
 			     mode = busy});
+	{options, State2} ->
+	    State3 = new_game(State2#state{speed = 200, points = ?EASY}),
+	    loop(State3);
 	Any ->
 	    io:format("~p\n", [Any]),
 	    loop(State)

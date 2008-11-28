@@ -22,13 +22,14 @@
 		score = 0,
 		direction = down,
 		snake = #snake{},
-		speed = 100,
+		speed = 200,
 		main_window_pid,
 		red = ?wxRED,
 		black = ?wxBLACK,
 		white = ?wxWHITE,
 		timer,
 		apple_pos,
-		mode}).
+		mode,
+		points = 10}).
 
 
