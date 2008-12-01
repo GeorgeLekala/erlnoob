@@ -115,8 +115,7 @@ create_grid(State = #state{panel = Panel,
     wxGrid:createGrid(Grid, Nrows, Ncols, []),
     [wxGrid:setColSize(Grid, Row, 17) || Row <- lists:seq(0, Ncols - 1)],
     [wxGrid:setRowSize(Grid, Col, 15) || Col <- lists:seq(0, Nrows - 1)],
-    Borders = borders(Nrows, Ncols),
-    colour_borders(Grid, Borders),
+    borders(Grid, Nrows, Ncols),
 
     wxGrid:setCellBackgroundColour(Grid, Nrows div 2, Ncols - (Ncols div 2), ?wxBLACK),
     wxGrid:setCellBackgroundColour(Grid, Nrows div 2, Ncols - (Ncols div 2) +1, ?wxBLACK),
@@ -150,20 +149,17 @@ create_grid(State = #state{panel = Panel,
 		main_window_pid = self(),
 		apple_pos = {Row, Col}}.
 
-borders(Nrows, Ncols) ->
+borders(Grid, Nrows, Ncols) ->
+    Black = ?wxBLACK,
     List1 = [{0, Col} || Col <- lists:seq(0, Ncols -1)],
     List2 = [{Nrows -1, Col} || Col <- lists:seq(0, Ncols -1)],
     List3 = [{Row, 0} || Row <- lists:seq(0, Nrows -1)],
     List4 = [{Row, Ncols -1} || Row <- lists:seq(0, Nrows -1)],
-    lists:flatten([List1, List2, List3, List4]).
-
-
-
-colour_borders(Grid, Borders) ->
     lists:foreach(fun({Row, Col}) ->
-			  wxGrid:setCellBackgroundColour(Grid, Row, Col, ?wxBLACK)
+			  wxGrid:setCellBackgroundColour(Grid, Row, Col, Black)
 		  end,
-		  Borders).
+		  lists:flatten([List1, List2, List3, List4])).
+
 
 refresh_sizer(Frame, Panel, Sizer) ->
     wxSizer:layout(Sizer),
@@ -174,19 +170,19 @@ refresh_sizer(Frame, Panel, Sizer) ->
     wxWindow:update(Frame).
 
 
-refresh_grid(State = #state{snake = Snake = #snake{head = Head = [{Row, Col} | _],
+move_snake(State = #state{snake = Snake = #snake{head = Head = [{Row, Col} | _],
 						   tail = [Tail| Tail2]}}) ->
     
     {Head2, WhadDidIEat, ApplePos} =
 	case State#state.direction of
 	    left ->
-		wx:batch(fun() -> move_snake(State, {Row, Col -1}, Tail) end);
+		wx:batch(fun() -> do_move_snake(State, {Row, Col -1}, Tail) end);
 	    right ->
-		wx:batch(fun() -> move_snake(State, {Row, Col +1}, Tail) end);
+		wx:batch(fun() -> do_move_snake(State, {Row, Col +1}, Tail) end);
 	    up ->
-		wx:batch(fun() -> move_snake(State, {Row -1, Col}, Tail) end);
+		wx:batch(fun() -> do_move_snake(State, {Row -1, Col}, Tail) end);
 	    down ->
-		wx:batch(fun() -> move_snake(State, {Row +1, Col}, Tail) end)
+		wx:batch(fun() -> do_move_snake(State, {Row +1, Col}, Tail) end)
 	end,
     wxWindow:refresh(State#state.frame),
     case WhadDidIEat of
@@ -206,7 +202,7 @@ refresh_grid(State = #state{snake = Snake = #snake{head = Head = [{Row, Col} | _
     end.    
 
 
-move_snake(State = #state{grid = Grid, red = Red, white = White, black = Black},
+do_move_snake(State = #state{grid = Grid, red = Red, white = White, black = Black},
 	   Head = {RowHead, ColHead}, {RowTail, ColTail}) ->
     %%io:format("Head: ~p Tail: ~p\n", [Head, Tail]),
     {DidIEat, ApplePos} =
@@ -242,7 +238,7 @@ next_apple(State = #state{black = Black, grid = Grid}) ->
 loop(State) ->
     receive
 	update ->
-	    State2 = wx:batch(fun() -> refresh_grid(State) end),
+	    State2 = wx:batch(fun() -> move_snake(State) end),
 	    loop(check_tail(State2#state{mode = available}));
 	game_over ->
 	    timer:cancel(State#state.timer),
