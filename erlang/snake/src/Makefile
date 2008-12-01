@@ -6,7 +6,8 @@ ERL_FLAGS = -I$(ERLINC) +warn_unused_vars +debug_info
 MODULES = \
 	snake \
         snake_wxgui\
-	snake_logics
+	snake_logics\
+	snakes
 
 INCLUDES =
 
