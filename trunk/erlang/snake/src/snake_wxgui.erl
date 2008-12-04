@@ -237,15 +237,16 @@ next_apple(State = #state{black = Black, grid = Grid}) ->
 
 loop(State) ->
     receive
+	{highscore, {Name, Score}} ->
+	    io:format("Score: ~p\nName: ~p\n", [Score, Name]),
+	    loop(State);
 	update ->
 	    State2 = wx:batch(fun() -> move_snake(State) end),
 	    loop(check_tail(State2#state{mode = available}));
 	game_over ->
 	    timer:cancel(State#state.timer),
-	    Dialog = wxTextEntryDialog:new(State#state.frame, "Game Over!\n\nYour score:" ++
-					   integer_to_list(State#state.score) ++
-					   "\n\nEnter your name:"),
-	    wxTextEntryDialog:show(Dialog),
+	    spawn_link(snake_logics, highscore, [State#state.score,
+						    State#state.main_window_pid]),
 	    loop(State#state{score = 0});
 	#wx{event = #wxClose{}} ->
 	    timer:cancel(State#state.timer),
