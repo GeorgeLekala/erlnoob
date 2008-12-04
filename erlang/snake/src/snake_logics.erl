@@ -28,3 +28,25 @@ pause_game(State) ->
 	    timer:cancel(State#state.timer),
 	    State#state{timer = undefined}
     end.
+
+highscore(Score, Pid) ->
+    Wx = wx:new(),
+    Dialog = wxTextEntryDialog:new(Wx, "Game Over!\n\nYour score:" ++
+				   integer_to_list(Score) ++
+				   "\n\nEnter your name:", [{value, "<Your Name>"}]),
+    wxTextEntryDialog:show(Dialog),
+    Name = loop(Dialog),
+    Pid ! {highscore, {Name, Score}}.
+
+loop(Dialog) ->
+    case wxTextEntryDialog:getValue(Dialog) of
+	[] ->
+	    timer:sleep(timer:seconds(2)),
+	    loop(Dialog);
+	"<Your Name>" ->
+	    timer:sleep(timer:seconds(2)),
+	    loop(Dialog);
+	Other ->
+	    Other
+    end.
+    
