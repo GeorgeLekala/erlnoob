@@ -20,8 +20,8 @@ start() ->
     spawn_link(fun() -> init() end).
 
 init() ->
-    P = wx:new(),
-    F = wxFrame:new(P,1, "WxImage Test"),
+    Wx = wx:new(),
+    Frame = wxFrame:new(Wx,1, "WxImage Test"),
     %% Menues
     Menu = wxMenu:new(),
     wxMenu:append(Menu, ?wxID_OPEN,  "Load Image"),
@@ -29,18 +29,18 @@ init() ->
     wxMenu:append(Menu, ?wxID_EXIT,  "Quit"),
     MB = wxMenuBar:new(),
     wxMenuBar:append(MB,Menu,"File"),
-    wxFrame:setMenuBar(F, MB),
-    wxFrame:connect(F, command_menu_selected),
-    wxFrame:connect(F, close_window, [{skip,true}]),
-    wxFrame:createStatusBar(F,[]),
+    wxFrame:setMenuBar(Frame, MB),
+    wxFrame:connect(Frame, command_menu_selected),
+    wxFrame:connect(Frame, close_window, [{skip,true}]),
+    wxFrame:createStatusBar(Frame,[]),
     %% Sub-Windows
     Opts = [{size, {300,300}}, {style, ?wxSUNKEN_BORDER}],
-    W1 = wxWindow:new(F, ?wxID_ANY, Opts),
+    W1 = wxWindow:new(Frame, ?wxID_ANY, Opts),
     wxWindow:connect(W1, paint, [{skip, true}]),
     Image   = wxImage:new("../images/s1.png", [{type, ?wxBITMAP_TYPE_PNG}]),
     GLAttrib = [{attribList, [?WX_GL_RGBA,?WX_GL_DOUBLEBUFFER,0]}],
-    W2 = wxGLCanvas:new(F,Opts ++ GLAttrib),
-    W3 = wxWindow:new(F, ?wxID_ANY, Opts),
+    W2 = wxGLCanvas:new(Frame,Opts ++ GLAttrib),
+    W3 = wxWindow:new(Frame, ?wxID_ANY, Opts),
     wxWindow:connect(W3, paint, [{skip, true}]),
     %% Setup sizer
     Sz = wxBoxSizer:new(?wxHORIZONTAL),
@@ -50,15 +50,15 @@ init() ->
     wxWindow:setSizer(F,Sz),
     wxSizer:setSizeHints(Sz,F),
     %% Show
-    wxFrame:show(F),
+    wxFrame:show(Frame),
     wxGLCanvas:setCurrent(W2),
     GL = setup_gl(W2,Image),
 %%    drawBox(GL),
     io:format("Native Handles ~p ~p ~p~n", 
-	      [wxWindow:getHandle(F),
+	      [wxWindow:getHandle(Frame),
 	       wxWindow:getHandle(W1),
 	       wxWindow:getHandle(W2)]),
-    State = screenshot(#s{f=F,w1=#img{win=W1,image=Image},w2=GL,w3=#img{win=W3}}),
+    State = screenshot(#s{f=Frame,w1=#img{win=W1,image=Image},w2=GL,w3=#img{win=W3}}),
     loop(State, 0).
 		
 loop(S,C) ->
