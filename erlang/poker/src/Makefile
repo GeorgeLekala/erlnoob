@@ -5,8 +5,8 @@ ERL_FLAGS = -I$(ERLINC) +warn_unused_vars +debug_info
 
 MODULES = \
 	poker\
-        poker_wxgui\
-	image
+        poker_wxgui
+#	image
 
 INCLUDES =
 
