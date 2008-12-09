@@ -38,7 +38,6 @@ init() ->
     W1 = wxWindow:new(Frame, ?wxID_ANY, Opts),
     wxWindow:connect(W1, paint, [{skip, true}]),
     Image   = wxImage:new("../images/s1.png", [{type, ?wxBITMAP_TYPE_PNG}]),
-    GLAttrib = [{attribList, [?WX_GL_RGBA,?WX_GL_DOUBLEBUFFER,0]}],
     W2 = wxGLCanvas:new(Frame,Opts ++ GLAttrib),
     W3 = wxWindow:new(Frame, ?wxID_ANY, Opts),
     wxWindow:connect(W3, paint, [{skip, true}]),
@@ -47,8 +46,8 @@ init() ->
     SF = wxSizerFlags:new(),
     wxSizerFlags:proportion(SF,1),
     wxSizer:add(Sz, W1, SF), 
-    wxWindow:setSizer(F,Sz),
-    wxSizer:setSizeHints(Sz,F),
+    wxWindow:setSizer(Frame,Sz),
+    wxSizer:setSizeHints(Sz,Frame),
     %% Show
     wxFrame:show(Frame),
     wxGLCanvas:setCurrent(W2),
@@ -58,7 +57,7 @@ init() ->
 	      [wxWindow:getHandle(Frame),
 	       wxWindow:getHandle(W1),
 	       wxWindow:getHandle(W2)]),
-    State = screenshot(#s{f=Frame,w1=#img{win=W1,image=Image},w2=GL,w3=#img{win=W3}}),
+    State = #s{f=Frame,w1=#img{win=W1,image=Image},w2=GL,w3=#img{win=W3}},
     loop(State, 0).
 		
 loop(S,C) ->
@@ -104,47 +103,6 @@ redraw2(Img = #img{win=Win,bmp=Bmp},Txt) ->
     wxClientDC:destroy(DC0),
     Img.
 
--define(VS, {{-0.5, -0.5, -0.5},  %1
-	     { 0.5, -0.5, -0.5},  %2
-	     { 0.5,  0.5, -0.5},   
-	     {-0.5,  0.5, -0.5},  %4
-	     {-0.5,  0.5,  0.5},
-	     { 0.5,  0.5,  0.5},  %6
-	     { 0.5, -0.5,  0.5}, 
-	     {-0.5, -0.5,  0.5}}).%8
-
--define(FACES, 
-	%% Faces    Normal     U-axis   V-axis 
-	[{{1,2,3,4},{0,0,-1},{-1,0,0}, {0,1,0}},  % 
-	 {{8,1,4,5},{-1,0,0},{0,0,1},  {0,1,0}},  %
-	 {{2,7,6,3},{1,0,0}, {0,0,-1}, {0,1,0}},  %
-	 {{7,8,5,6},{0,0,1}, {1,0,0},  {0,1,0}},  %
-	 {{4,3,6,5},{0,1,0}, {-1,0,0}, {0,0,1}},  %
-	 {{1,2,7,8},{0,-1,0},{1,0,0},  {0,0,1}}]).
-
-update_rotation(S=#s{w2=GL=#gl{deg=Rot}}) ->
-    S#s{w2=GL#gl{deg = Rot + 1.0}}.
-
-screenshot(S=#s{w2=#gl{win=Win}, w3=W3=#img{image=OldImg,bmp=OldBmp}}) ->
-    {W,H} = wxWindow:getClientSize(Win),
-    gl:pixelStorei(?GL_PACK_ALIGNMENT, 1),
-    gl:readBuffer(?GL_FRONT),
-    Mem = wx:create_memory(W*H*3),
-    gl:readPixels(0, 0, W, H, ?GL_RGB, ?GL_UNSIGNED_BYTE, Mem),
-    ImageBin0 = wx:get_memory_bin(Mem),
-    WSz = W*3,
-    Im = [Row || <<Row:WSz/binary>> <= ImageBin0],
-    ImageBin = list_to_binary(lists:reverse(Im)),
-    NewImage = wxImage:new(W,H,ImageBin),
-    case OldImg of 
-	undefined -> ignore;
-	_ -> wxImage:destroy(OldImg)
-    end,
-    case OldBmp of 
-	undefined -> ignore;
-	_ -> wxBitmap:destroy(OldBmp)
-    end,
-    S#s{w3=W3#img{image=NewImage,bmp=undefined}}.
 
 %% Needs to setup opengl after window is shown...
 %% GL context is created when shown first time.
@@ -160,4 +118,4 @@ setup_gl(Win, Image) ->
     Data = wxImage:getData(Image),
     gl:texImage2D(?GL_TEXTURE_2D, 0, 3, IW, IH, 0, ?GL_RGB, ?GL_UNSIGNED_BYTE, Data),
     gl:enable(?GL_TEXTURE_2D),
-    #gl{win=Win,data={?FACES,?VS},deg=0.0}.
+    #gl{win=Win, deg=0.0}.
