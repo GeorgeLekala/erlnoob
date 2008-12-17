@@ -33,12 +33,11 @@ init() ->
     Wx = wx:new(),
     State = wx:batch(fun() -> create_window(Wx) end),
 %%     Pid = spawn_link(fun() -> init_refresh_grid(State) end),
-%%    spawn_link(?MODULE, options_window, [State]),
-    loop(State).
+    State2 = options_window(State),
+    loop(State2).
 
 options_window(State) ->
-    Wx = wx:new(),
-    Frame = wxFrame:new(Wx, ?wxID_ANY, "Options", []),
+    Win = wxWindow:new(Wx, ?wxID_ANY, "Options", []),
     Panel = wxPanel:new(Frame, []),
     Sizer = wxBoxSizer:new(?wxVERTICAL),
     List = 
@@ -54,7 +53,7 @@ options_window(State) ->
 		  List),
 
     wxWindow:show(Frame),
-    State#state.main_window_pid ! {options, State}.
+    State.
 
 create_window(Wx) ->
     Frame = wxFrame:new(Wx, ?wxID_ANY, "erlSnake", []),
