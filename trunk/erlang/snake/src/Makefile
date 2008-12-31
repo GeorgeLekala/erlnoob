@@ -7,7 +7,8 @@ MODULES = \
 	snake \
         snake_wxgui\
 	snake_logics\
-	snakes
+	snakes\
+	snake_gl
 
 INCLUDES =
 

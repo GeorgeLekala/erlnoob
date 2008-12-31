@@ -37,7 +37,8 @@ init() ->
     loop(State2).
 
 options_window(State) ->
-    Win = wxWindow:new(Wx, ?wxID_ANY, "Options", []),
+    Wx = wx:new(),
+    Frame = wxFrame:new(Wx, ?wxID_ANY, "Options", []),
     Panel = wxPanel:new(Frame, []),
     Sizer = wxBoxSizer:new(?wxVERTICAL),
     List = 
@@ -47,7 +48,7 @@ options_window(State) ->
 	 wxRadioButton:new(Panel, ?HARD, "Hard"),
 	 wxRadioButton:new(Panel, ?HARDEST, "Hardest")],
     
-    lists:foreach(fun(Item) ->
+    wx:foreach(fun(Item) ->
 			  wxSizer:add(Sizer, Item)
 		  end,
 		  List),
@@ -255,7 +256,7 @@ loop(State) ->
 	    loop(State)
     end.
 
-
+%% Create a new game
 new_game(State) ->
     timer:cancel(State#state.timer),
     wxGrid:destroy(State#state.grid),
