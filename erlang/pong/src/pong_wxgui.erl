@@ -18,13 +18,14 @@
 		pen,
 		brush,
 		ball_pos = {60,60},
-		direction = left
+		direction = 300,
+		timer
 	       }).
 
 create_window() ->
     Wx = wx:new(),
     %%wx:debug(2),
-    Frame = wxFrame:new(Wx, ?wxID_ANY, "erlPong", []),
+    Frame = wxFrame:new(Wx, ?wxID_ANY, "erlPong", [{size, {500,400}}]),
     wxFrame:createStatusBar(Frame,[]),
     wxFrame:connect(Frame, close_window, [{skip, true}]),
 
@@ -49,66 +50,65 @@ create_window() ->
     wxFrame:setMenuBar(Frame, MenuBar),
 
     State = #state{frame = Frame,
-		   panel = Panel},
+		   canvas = Panel},
     wxFrame:show(Frame),
     State2 = create_canvas(State),
+    Me = self(), 
+    {ok, Timer} = timer:send_interval(70, Me, update),
 
-    loop(State2).
+    loop(State2#state{timer = Timer}).
 
 
-create_canvas(State = #state{panel = Panel}) ->
-    CDC = wxClientDC:new(Panel),
+create_canvas(State = #state{canvas = Panel}) ->
     Brush = wxBrush:new({200,200,200}, []),	       
     Pen   = wxPen:new(?wxBLACK, [{width, 10}]),
-    _State2 = borders(State#state{pen = Pen, brush = Brush,
-				  canvas = CDC}).
+    CDC = wxClientDC:new(Panel),
+    DC  = wxBufferedDC:new(CDC),
+    borders(DC, Brush, Pen, {State#state.ball_pos, State#state.direction}),
+    wxBufferedDC:destroy(DC),
+    wxClientDC:destroy(CDC),
+    State#state{pen = Pen, brush = Brush}.
 
 
 loop(State) ->
     receive
 	#wx{event = #wxPaint{}} ->
-	    loop(borders(State));
+	    {NewPos, Direction} = redraw(State),
+	    loop(State#state{ball_pos = NewPos,
+			     direction = Direction});
 	#wx{event = #wxClose{}} ->
+	    timer:cancel(State#state.timer),
+	    io:format("~p\n",[process_info(self(),[message_queue_len])]),
 	    wx:destroy();
 	Wx = #wx{} ->
 	    io:format("Got: ~p\n", [Wx]),
-	    loop(State)
-    after 
-	100 ->
-	    loop(borders(State))
+	    loop(State);
+	update ->
+	    {NewPos, Direction} = redraw(State),
+	    loop(State#state{ball_pos = NewPos,
+			     direction = Direction})
     end.
     
-borders(State = #state{panel = Panel,
-		       brush = Brush,
-		       pen = Pen,
-		       canvas = CDC,
-		       ball_pos = OldPos,
-		       direction = Direction}) ->
-    DC = wxBufferedDC:new(CDC),
+
+redraw(State) ->
+    CDC = wxClientDC:new(State#state.canvas),
+    DC  = wxBufferedDC:new(CDC),
+    wxDC:clear(DC),
+    PosNDir = borders(DC, State#state.brush,
+		     State#state.pen,
+		     {State#state.ball_pos,
+		      State#state.direction}),
+    wxBufferedDC:destroy(DC),
+    wxClientDC:destroy(CDC),
+    PosNDir.
+
+borders(DC, Brush, Pen, {OldPos, Direction}) ->
     wxDC:setBrush(DC, Brush),
     wxDC:setPen(DC, Pen),
-    wxDC:drawRectangle(DC, {5,5}, {200, 100}),
-    {NewPos, NewDirection} = get_new_pos(OldPos, Direction),
+    wxDC:drawRectangle(DC, {5,5}, {405, 205}),
+    {NewPos, NewDirection} = pong_logics:get_new_pos(OldPos, Direction),
     draw_ball(DC, NewPos),
-    wxBufferedDC:destroy(DC),
-    State#state{ball_pos = NewPos,
-		direction = NewDirection}.
-
-get_new_pos({X, Y}, Direction) ->
-    case Direction of
-	left ->
-	    if
-		X < 20  -> {{X+5, Y}, right};
-		X > 185 -> {{X-5, Y}, left};
-		true -> {{X-5, Y}, Direction}
-	    end;
-	right ->
-	    if
-		X < 15  -> {{X+5, Y}, right};
-		X > 185 -> {{X-5, Y}, left};
-		true -> {{X+5, Y}, Direction}
-	    end
-    end.
+    {NewPos, NewDirection}.
 
 draw_ball(DC, Coord) ->
     wxDC:drawCircle(DC, Coord, 2),
