@@ -18,7 +18,7 @@
 		pen,
 		brush,
 		ball_pos = {60,60},
-		direction = 300,
+		direction = 45,
 		timer
 	       }).
 
