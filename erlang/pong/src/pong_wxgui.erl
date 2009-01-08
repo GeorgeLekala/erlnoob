@@ -17,8 +17,9 @@
 		borders,
 		pen,
 		brush,
-		ball_pos = {60,60},
-		direction = 45,
+		ball_pos = {200,100},
+		direction = {nw, up},
+		angle = 225,
 		timer
 	       }).
 
@@ -64,7 +65,9 @@ create_canvas(State = #state{canvas = Panel}) ->
     Pen   = wxPen:new(?wxBLACK, [{width, 10}]),
     CDC = wxClientDC:new(Panel),
     DC  = wxBufferedDC:new(CDC),
-    borders(DC, Brush, Pen, {State#state.ball_pos, State#state.direction}),
+    borders(DC, Brush, Pen, {State#state.ball_pos,
+			     State#state.angle,
+			     State#state.direction}),
     wxBufferedDC:destroy(DC),
     wxClientDC:destroy(CDC),
     State#state{pen = Pen, brush = Brush}.
@@ -73,9 +76,10 @@ create_canvas(State = #state{canvas = Panel}) ->
 loop(State) ->
     receive
 	#wx{event = #wxPaint{}} ->
-	    {NewPos, Direction} = redraw(State),
+	    {NewPos, Angle, Direction} = redraw(State),
 	    loop(State#state{ball_pos = NewPos,
-			     direction = Direction});
+			     direction = Direction,
+			     angle = Angle});
 	#wx{event = #wxClose{}} ->
 	    timer:cancel(State#state.timer),
 	    io:format("~p\n",[process_info(self(),[message_queue_len])]),
@@ -84,9 +88,10 @@ loop(State) ->
 	    io:format("Got: ~p\n", [Wx]),
 	    loop(State);
 	update ->
-	    {NewPos, Direction} = redraw(State),
+	    {NewPos, Angle, Direction} = redraw(State),
 	    loop(State#state{ball_pos = NewPos,
-			     direction = Direction})
+			     direction = Direction,
+			     angle = Angle})
     end.
     
 
@@ -97,18 +102,20 @@ redraw(State) ->
     PosNDir = borders(DC, State#state.brush,
 		     State#state.pen,
 		     {State#state.ball_pos,
+		      State#state.angle,
 		      State#state.direction}),
     wxBufferedDC:destroy(DC),
     wxClientDC:destroy(CDC),
     PosNDir.
 
-borders(DC, Brush, Pen, {OldPos, Direction}) ->
+borders(DC, Brush, Pen, {OldPos, Angle, Direction}) ->
     wxDC:setBrush(DC, Brush),
     wxDC:setPen(DC, Pen),
     wxDC:drawRectangle(DC, {5,5}, {405, 205}),
-    {NewPos, NewDirection} = pong_logics:get_new_pos(OldPos, Direction),
+    {NewPos, NewAngle, NewDirection} =
+	pong_logics:get_new_pos(OldPos, Angle, Direction),
     draw_ball(DC, NewPos),
-    {NewPos, NewDirection}.
+    {NewPos, NewAngle, NewDirection}.
 
 draw_ball(DC, Coord) ->
     wxDC:drawCircle(DC, Coord, 2),
