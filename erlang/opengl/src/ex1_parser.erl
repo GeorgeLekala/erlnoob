@@ -26,6 +26,8 @@ parse(Filename) ->
 
     io:format("~p\n", [DataChunkSize]).
 
-
+read_vertex(Chunk) ->
+    <<Vertex:32>> = Chunk,
+    <<Vx:4,Vy:4,Vz:4,Nx:4,Ny:4,Nz:4,U:4,V:4>> = Vertex.
 
 
