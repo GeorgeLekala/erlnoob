@@ -24,10 +24,16 @@ parse(Filename) ->
 
     <<ObjectRefChunkSize:32/little, ObjectRefChunk/binary>> = Body4,
 
-    io:format("~p\n", [DataChunkSize]).
+    read_vertex(DataChunk).
 
-read_vertex(Chunk) ->
-    <<Vertex:32>> = Chunk,
-    <<Vx:4,Vy:4,Vz:4,Nx:4,Ny:4,Nz:4,U:4,V:4>> = Vertex.
-
+read_vertex(Chunk) when size(Chunk) > 0 ->
+    io:format("~p \n", [size(Chunk)]),
+    <<Vertex:32/binary, Rest/binary>> = Chunk,
+    <<Vx:32/integer-signed,Vy:32/integer-signed,Vz:32/integer-signed,
+     Nx:32/float,Ny:32/float,Nz:32/float,
+     U:32/little,S:32/little>> = Vertex,
+    io:format("~p ~p ~p\n", [Vx, Vy, Vz]),
+    read_vertex(Rest);
+read_vertex(_) ->
+    ok.
 
