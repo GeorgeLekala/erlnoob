@@ -24,16 +24,29 @@ parse(Filename) ->
 
     <<ObjectRefChunkSize:32/little, ObjectRefChunk/binary>> = Body4,
 
-    read_vertex(DataChunk).
+    read_vertex(DataChunk,[]).
 
-read_vertex(Chunk) when size(Chunk) > 0 ->
+read_vertex(Chunk, Acc) when size(Chunk) > 0 ->
     io:format("~p \n", [size(Chunk)]),
-    <<Vertex:32/binary, Rest/binary>> = Chunk,
-    <<Vx:32/integer-signed,Vy:32/integer-signed,Vz:32/integer-signed,
-     Nx:32/float,Ny:32/float,Nz:32/float,
-     U:32/little,S:32/little>> = Vertex,
-    io:format("~p ~p ~p\n", [Vx, Vy, Vz]),
-    read_vertex(Rest);
-read_vertex(_) ->
-    ok.
+    <<Vertex:96/binary, Rest/binary>> = Chunk,
+    <<V1:12/binary,N1:12/binary,U1:8/binary,
+      V2:12/binary,N2:12/binary,U2:8/binary,
+      V3:12/binary,N3:12/binary,U3:8/binary>> = Vertex,
+    
+    Vertexs = lists:map(fun({V,N,U}, Acc2) ->
+				[{convert_from_binary(V),
+				  convert_from_binary(N),
+				  convert_from_binary(U)}| Acc2]
+			end, [{V1, N1, U1},
+			      {V2, N2, U2},
+			      {V3, N3, U3}]),
+    read_vertex(Rest, [Vertexs | Acc]);
+read_vertex(<<>>, Acc) ->
+    Acc.
+
+ 
+convert_from_binary(<<X:32/float-little,Y:32/float-little,Z:32/float-little>>) ->
+    {X, Y, Z};
+convert_from_binary(<<U:32/float-little,V:32/float-little>>) ->
+    {U,V}.
 
