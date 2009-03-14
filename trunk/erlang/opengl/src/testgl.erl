@@ -13,7 +13,11 @@
 -export([start/0]).
 
 -record(gl, {win,
-	     deg}).
+	     data = []
+	    }).
+
+-record(state, {gl = #gl{}
+	       }).
 
 start() ->
     Wx = wx:new(),
@@ -34,45 +38,71 @@ start() ->
 
     wxFrame:show(Frame),
     wxGLCanvas:setCurrent(GLCanvas),
-    draw_scene(GLCanvas),
 
-    loop(#gl{win = GLCanvas}).
+    {Data,_,_} = ex1_parser:parse("cube.wex1"),
+    loop(#state{gl = #gl{win = GLCanvas,data = Data}}).
 
 loop(State) ->
     receive
 	#wx{event = #wxPaint{}} ->
-	    draw_scene(State#gl.win),
+	    draw_scene(State#state.gl),
 	    loop(State);
 	#wx{event = #wxClose{}} ->
 	    exit(shutdown);
 	#wx{event = #wxMouse{}} ->
-	    draw_scene(State#gl.win),
+	    draw_scene(State#state.gl),
 	    loop(State);
 	Any ->
 	    io:format("~p\n", [Any]),
 	    loop(State)
     after 10 ->
 	    gl:rotatef(0.2, 1.0, 1.0, 1.0),
-	    draw_scene(State#gl.win), 
+	    draw_scene(State#state.gl), 
 	    loop(State)
     end.
     
 
-draw_scene(Win) ->
+draw_scene(GL = #gl{}) ->
     gl:clear(?GL_COLOR_BUFFER_BIT bor ?GL_DEPTH_BUFFER_BIT),
-    gl:'begin'(?GL_QUADS),
-    gl:color3ub(255, 255, 255),
-    gl:vertex3fv({ 0.5, -0.5, 0.0}),
-    gl:vertex3fv({-0.5, -0.5, 0.0}),
-    gl:vertex3fv({-0.5,  0.5, 0.0}),
-    gl:vertex3fv({ 0.5,  0.5, 0.0}),
+    gl:'begin'(?GL_TRIANGLES),
+    
+    draw(GL#gl.data,{255,0,0}),
+    
 
-    gl:color3ub(255, 0, 255),
-    gl:vertex3fv({ 0.0, 0.5, 0.0}),
-    gl:vertex3fv({ 0.0, 0.5, 0.5}),
-    gl:vertex3fv({ 0.5, 0.5, 0.5}),
-    gl:vertex3fv({ 0.5, 0.5, 0.0}),
-    gl:texCoord2f(0.0, 0.0),
+
+%%       gl:color3ub(255, 255, 255),
+%%       gl:vertex3fv({ 0.5, -0.5, 0.0}),
+%%       gl:vertex3fv({-0.5, -0.5, 0.0}),
+%%       gl:vertex3fv({-0.5,  0.5, 0.0}),
+%%       gl:vertex3fv({ 0.5,  0.5, 0.0}),
+      
+%%       gl:color3ub(255, 0, 255),
+%%       gl:vertex3fv({ 0.0, 0.5, 0.0}),
+%%       gl:vertex3fv({ 0.0, 0.5, 0.5}),
+%%       gl:vertex3fv({ 0.5, 0.5, 0.5}),
+%%       gl:vertex3fv({ 0.5, 0.5, 0.0}),
     gl:'end'(),
-    wxGLCanvas:swapBuffers(Win).
+    wxGLCanvas:swapBuffers(GL#gl.win).
 
+draw([], _) -> ok;
+draw(Data, {R,G,B}) when R =:= 255 ->
+    {Data2, Data3} = lists:split(3,Data),
+    gl:color3ub(R,G,B),
+    wx:foreach(fun({V = {_,_,_},_N = {_,_,_},{_U, _S}}) ->
+		       gl:vertex3fv(V)
+	       end, Data2),
+    draw(Data3, {0,255,0});
+draw(Data, {R,G,B}) when G =:= 255 ->
+    {Data2, Data3} = lists:split(3,Data),
+    gl:color3ub(R,G,B),
+    wx:foreach(fun({V = {_,_,_},_N = {_,_,_},{_U, _S}}) ->
+		       gl:vertex3fv(V)
+	       end, Data2),
+    draw(Data3, {0,0,255});
+draw(Data, {R,G,B}) when B =:= 255 ->
+    {Data2, Data3} = lists:split(3,Data),
+    gl:color3ub(R,G,B),
+    wx:foreach(fun({V = {_,_,_},_N = {_,_,_},{_U, _S}}) ->
+		       gl:vertex3fv(V)
+	       end, Data2),
+    draw(Data3, {255,0,0}).
