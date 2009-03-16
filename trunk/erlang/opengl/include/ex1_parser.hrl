@@ -8,3 +8,12 @@
 
 -record(object_ref, {name,
 		     mats}).
+
+
+-record(material, {name,
+		   diffuse,
+		   ambient,
+		   specular,
+		   emission,
+		   shininess,
+		   textures}).

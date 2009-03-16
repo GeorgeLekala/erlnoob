@@ -1,46 +1,48 @@
 %%%-------------------------------------------------------------------
-%%% File    : image.erl
-%%% Author  : Dan Gudmundsson <dgud@erix.ericsson.se>
-%%% Description : Test images (and read/write binaries)
+%%% File    : testgl.erl
+%%% Author  : Olle Mattsson <olle@zubat>
+%%% Description : 
 %%%
-%%% Created : 12 Jun 2007 by Dan Gudmundsson <dgud@erix.ericsson.se>
+%%% Created : 16 Mar 2009 by Olle Mattsson <olle@zubat>
 %%%-------------------------------------------------------------------
 -module(testgl).
 
--include_lib("wx/include/wx.hrl"). 
--include_lib("wx/include/gl.hrl"). 
 
--export([start/0]).
+-include_lib("wx/include/wx.hrl"). 
+-include_lib("wx/include/gl.hrl").
+-include("ex1_parser.hrl").
+
+-export([start/1]).
 
 -record(gl, {win,
-	     data = []
+	     data,
+	     material,
+	     obj_ref
 	    }).
 
--record(state, {gl = #gl{}
+-record(state, {gl
 	       }).
 
-start() ->
+start(Filename) ->
     Wx = wx:new(),
     Frame = wxFrame:new(Wx, ?wxID_ANY, "GLTest", [{size, {800, 600}}]),
-    
-    MenuBar = wxMenuBar:new(),
-    File = wxMenu:new(),
-    wxMenu:append(File, ?wxID_EXIT, "&Quit"),
-    wxMenuBar:append(MenuBar, File, "File"),
-    wxFrame:setMenuBar(Frame, MenuBar),
-    wxFrame:connect(Frame, command_menu_selected, []),
     wxFrame:connect(Frame, close_window, [{skip, true}]),
     wxFrame:connect(Frame, paint, []),
 
     GLCanvas = wxGLCanvas:new(Frame, []),
     wxFrame:connect(GLCanvas, left_up, []),
+    wxFrame:connect(GLCanvas, right_up, []),
 
 
     wxFrame:show(Frame),
     wxGLCanvas:setCurrent(GLCanvas),
 
-    {Data,_,_} = ex1_parser:parse("cube.wex1"),
-    loop(#state{gl = #gl{win = GLCanvas,data = Data}}).
+    {Data,Material,ObjectRef} = ex1_parser:parse(Filename),
+    loop(#state{gl = #gl{win = GLCanvas,
+			 data = Data,
+			 material = Material,
+			 obj_ref = ObjectRef
+			}}).
 
 loop(State) ->
     receive
@@ -48,15 +50,19 @@ loop(State) ->
 	    draw_scene(State#state.gl),
 	    loop(State);
 	#wx{event = #wxClose{}} ->
-	    exit(shutdown);
-	#wx{event = #wxMouse{}} ->
+	    exit;
+	#wx{event = #wxMouse{type = right_up}} ->
+	    gl:scalef(1.5,1.5,1.5),
+	    draw_scene(State#state.gl),
+	    loop(State);
+	#wx{event = #wxMouse{type = left_up}} ->
+	    gl:scalef(0.5,0.5,0.5),
 	    draw_scene(State#state.gl),
 	    loop(State);
 	Any ->
 	    io:format("~p\n", [Any]),
 	    loop(State)
     after 10 ->
-	    gl:rotatef(0.2, 1.0, 1.0, 1.0),
 	    draw_scene(State#state.gl), 
 	    loop(State)
     end.
@@ -64,45 +70,31 @@ loop(State) ->
 
 draw_scene(GL = #gl{}) ->
     gl:clear(?GL_COLOR_BUFFER_BIT bor ?GL_DEPTH_BUFFER_BIT),
-    gl:'begin'(?GL_TRIANGLES),
-    
-    draw(GL#gl.data,{255,0,0}),
-    
+    gl:'begin'(?GL_LINES),
+    gl:color3ub(255, 255, 255),
+    gl:rotatef(0.8, 1.0, 1.0, 0.5),
 
-
-%%       gl:color3ub(255, 255, 255),
-%%       gl:vertex3fv({ 0.5, -0.5, 0.0}),
-%%       gl:vertex3fv({-0.5, -0.5, 0.0}),
-%%       gl:vertex3fv({-0.5,  0.5, 0.0}),
-%%       gl:vertex3fv({ 0.5,  0.5, 0.0}),
-      
-%%       gl:color3ub(255, 0, 255),
-%%       gl:vertex3fv({ 0.0, 0.5, 0.0}),
-%%       gl:vertex3fv({ 0.0, 0.5, 0.5}),
-%%       gl:vertex3fv({ 0.5, 0.5, 0.5}),
-%%       gl:vertex3fv({ 0.5, 0.5, 0.0}),
+    [Buff] = gl:genBuffers(1),
+    gl:bindBuffer(?GL_ARRAY_BUFFER,Buff),
+    gl:bufferData(?GL_ARRAY_BUFFER, size(GL#gl.data),
+		  GL#gl.data, ?GL_STATIC_DRAW),
+    gl:vertexPointer(3, ?GL_FLOAT,  8*4, 0),
+    gl:normalPointer(?GL_FLOAT,     8*4, 3*4),
+    gl:texCoordPointer(2,?GL_FLOAT, 8*4, 6*4),
+   
+    %% The acutal Drawing code is
+    gl:enableClientState(?GL_VERTEX_ARRAY),
+    gl:enableClientState(?GL_NORMAL_ARRAY),
+    gl:enableClientState(?GL_TEXTURE_COORD_ARRAY),
+    wx:foreach(fun({Mat,First,Sz}) ->
+		       %%set_mat(Mat,Mats),
+		       gl:bindBuffer(?GL_ARRAY_BUFFER,Buff),
+		       gl:drawArrays(?GL_TRIANGLES, First, Sz),
+		       gl:bindBuffer(?GL_ARRAY_BUFFER,0)
+	       end, GL#gl.obj_ref),
+    gl:disableClientState(?GL_TEXTURE_COORD_ARRAY),
+    gl:disableClientState(?GL_VERTEX_ARRAY),
+    gl:disableClientState(?GL_NORMAL_ARRAY),
     gl:'end'(),
     wxGLCanvas:swapBuffers(GL#gl.win).
 
-draw([], _) -> ok;
-draw(Data, {R,G,B}) when R =:= 255 ->
-    {Data2, Data3} = lists:split(3,Data),
-    gl:color3ub(R,G,B),
-    wx:foreach(fun({V = {_,_,_},_N = {_,_,_},{_U, _S}}) ->
-		       gl:vertex3fv(V)
-	       end, Data2),
-    draw(Data3, {0,255,0});
-draw(Data, {R,G,B}) when G =:= 255 ->
-    {Data2, Data3} = lists:split(3,Data),
-    gl:color3ub(R,G,B),
-    wx:foreach(fun({V = {_,_,_},_N = {_,_,_},{_U, _S}}) ->
-		       gl:vertex3fv(V)
-	       end, Data2),
-    draw(Data3, {0,0,255});
-draw(Data, {R,G,B}) when B =:= 255 ->
-    {Data2, Data3} = lists:split(3,Data),
-    gl:color3ub(R,G,B),
-    wx:foreach(fun({V = {_,_,_},_N = {_,_,_},{_U, _S}}) ->
-		       gl:vertex3fv(V)
-	       end, Data2),
-    draw(Data3, {255,0,0}).
