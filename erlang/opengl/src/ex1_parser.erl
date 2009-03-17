@@ -31,89 +31,55 @@ parse(Filename) ->
     <<ObjectRefSize:32/little, Body5/binary>> = Body4,
     <<ObjectRefBin:ObjectRefSize/binary>> = Body5,
 
-    Material = parse_material(MaterialBin),
-    ObjRef = read_object_ref(ObjectRefBin),
+    Materials = get_materials(MaterialBin),
+    ObjRefs = get_objects(ObjectRefBin),
     %%gen(Header,ReadData, ReadMaterial, ReadObjRef),
-    {DataChunk, Material, ObjRef}.
+    {DataChunk, Materials, ObjRefs}.
 
 
 
 %% Read Material :: FIX ME - Needs implementation
-parse_material(Material) ->
-    parse_material(Material, []).
+get_materials(Material) ->
+    get_materials(Material, []).
 
-parse_material(Material, Acc) when size(Material) > 0 ->
-    <<MatNameSize:32/little,Rest/binary>> = Material,
-    <<MatName:MatNameSize/binary,Floats/binary>> = Rest,
-    <<DR:32/float,DG:32/float,DB:32/float,DA:32/float,
-     AR:32/float,AG:32/float,AB:32/float,AA:32/float,
-     SR:32/float,SG:32/float,SB:32/float,SA:32/float,
-     ER:32/float,EG:32/float,EB:32/float,EA:32/float,
-     Sh:32/float,MapSize:32/little,Maps0/binary>> = Floats,
-    
+get_materials(<<NSz:32/little, Name:NSz/binary, 
+	       DR:32/float,DG:32/float,DB:32/float,DA:32/float,
+	       AR:32/float,AG:32/float,AB:32/float,AA:32/float,
+	       SR:32/float,SG:32/float,SB:32/float,SA:32/float,
+	       ER:32/float,EG:32/float,EB:32/float,EA:32/float,
+	       Sh:32/float,NoOfImages:32/little,Rest/binary>>, Acc) ->
+    {Maps, Next} = get_maps(NoOfImages, Rest, []),
+    Mat = {Name,{DR,DG,DB,DA},{AR,AG,AB,AA},
+	   {SR,SG,SB,SA},{ER,EG,EB,EA},Sh,
+	   Maps},
+    get_materials(Next, [Mat|Acc]);
+get_materials(<<>>, Acc) ->
+    Acc.
 
-    {Material2,Textures} = read_image(Maps0, MapSize),
-    parse_material(Material2, [#material{name      = get_name(MatName),
-					 diffuse   = {DR,DG,DB,DA},
-					 ambient   = {AR,AG,AB,AA},
-					 specular  = {SR,SG,SB,SA},
-					 emission  = {ER,EG,EB,EA},
-					 shininess = Sh,
-					 textures  = Textures}|Acc]);
-parse_material(<<>>, Acc) ->
-    lists:reverse(Acc).
+get_maps(0, Next, Acc) -> {Acc,Next};
+get_maps(I, <<TSz:32/little,Type:TSz/binary,
+	     FSz:32/little,File:FSz/binary, Next/binary>>, Acc) ->
+    get_maps(I-1, Next, [{Type,File}|Acc]).
 
+get_objects(ObjectBin) ->
+    get_objects(ObjectBin, []).
+get_objects(<<BSz:32/little,ObjBlock:BSz/binary,Next/binary>>,Acc) ->
+    Object = get_object(ObjBlock),
+    get_objects(Next,Object++Acc);
+get_objects(<<>>,Acc) ->
+    Acc.
 
-read_image(Textures, Size) ->
-    read_image(Textures, [], Size).
+get_object(<<NameSz:32/little,_Name:NameSz/binary,
+	    NoMeshes:32/little,Meshes/binary>>) ->
+    MeshPtrs = get_mesh_ptr(NoMeshes,Meshes,[]),
+    MeshPtrs.
 
-read_image(Textures, Acc, Size) when Size =/= 0 ->
-    <<TypeBinSize:32/little, Rest/binary>> = Textures,
-
-    <<TypeBin:TypeBinSize/binary,
-     FileBinSize:32/little, Rest2/binary>> = Rest,
-
-    <<FileBin:FileBinSize/binary, Textures2/binary>> = Rest2,
-    
-    Texture = {get_name(TypeBin), get_name(FileBin)},
-    read_image(Textures2, [Texture| Acc], Size-1);
-read_image(Mat, Acc, _) ->
-    {Mat, lists:reverse(Acc)}.
-
-
-%% Read ObjectRef
-read_object_ref(ObjBin) ->
-    read_object_ref(ObjBin, []).
-
-read_object_ref(<<ObjNameBinSize:32/little,Rest/binary>>, Acc) ->
-    <<ObjNameBin:ObjNameBinSize/binary, Rest2/binary>> = Rest,
-    case size(Rest2) of
-	0 ->
-	    read_object_ref(Rest2, Acc);
-	_ ->
-	    <<MatsLen:32/little,Rest3/binary>> = Rest2,
-	    {Rest4, Refs} = read_refs(Rest3, MatsLen),
-	    read_object_ref(Rest4, [{get_name(ObjNameBin),
-				     get_name(Refs)} | Acc])
-    end;
-read_object_ref(<<>>, Acc) ->
-    lists:reverse(Acc).
+get_mesh_ptr(0, _, Acc) ->
+    lists:reverse(Acc);
+get_mesh_ptr(I,<<MSz:32/little,Mat:MSz/binary,Start:32/little,Verts:32/little,Next/binary>>,Acc) ->
+    get_mesh_ptr(I-1,Next,[{Mat,Start,Verts}|Acc]).
 
 
-read_refs(Bin, Length) ->
-    read_refs(Bin, [], Length).
-
-read_refs(<<Size:32/little,Bin/binary>>, Acc, Length) when Length =/= 0 ->
-    <<MatName:Size/binary,Bin2/binary>> = Bin,
-    <<Start:32/little,Verts:32/little,Bin3/binary>> = Bin2,
-    read_refs(Bin3, [{get_name(MatName), Start, Verts}|Acc], Length-1);
-read_refs(Rest, Acc, 0) ->
-    {Rest, lists:reverse(Acc)}.
-
-
-get_name(BinList) ->
-    [_|T] = lists:reverse(binary_to_list(BinList)),
-    lists:reverse(T).
     
  
 convert_from_binary(<<X:32/float-little,
