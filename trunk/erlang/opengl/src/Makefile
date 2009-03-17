@@ -5,7 +5,8 @@ ERL_FLAGS = -I$(ERLINC) +warn_unused_vars +debug_info
 
 MODULES = \
 	ex1_parser\
-	testgl
+	testgl\
+	ex2
 
 INCLUDES =
 
