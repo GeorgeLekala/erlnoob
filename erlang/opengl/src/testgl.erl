@@ -45,9 +45,9 @@
 		time,
 		cam,
 		type=dlo,
-		angle={0.0,0.0},
+		angle=0.0,
 		draw,
-		mouse={{0,0},{0,0}},
+		mouse = {0,0},
 		keys,
 		objects = []
 	       }).
@@ -80,23 +80,20 @@ loop(State = #state{cam=Cam}) ->
 		end;
 	    #wx{event = #wxMouse{type = middle_down, x=X,y=Y}} ->
 		wxGLCanvas:connect(State#state.canvas, motion, []),
-		{OldMouse,_}=State#state.mouse,
-		State#state{mouse = {{X,Y}, OldMouse}};
+		State#state{mouse = {X,Y}};
 	    #wx{event = #wxMouse{type = middle_up, x=X,y=Y}} ->
 		wxGLCanvas:disconnect(State#state.canvas, motion),
-		{OldMouse,_}=State#state.mouse,
-		State#state{mouse = {{X,Y}, OldMouse}};
-	    #wx{event = #wxMouse{type = motion, x=X,y=Y}} ->
-		{OldMouse,_}=State#state.mouse,
-		State2 = State#state{mouse={{X,Y},OldMouse}},
-		change_camera(State2);
-	    #wx{event = #wxMouse{type = left_up}} ->
-		State#state{};
-	    #wx{event = #wxMouse{type = right_up}} ->
-		State#state{};
+		State#state{mouse = {X,Y}};
+	    #wx{event =Mouse= #wxMouse{type = motion}} ->
+		change_camera(State,Mouse);
+
+	    #wx{event = #wxMouse{type = left_up,x=X,y=Y}} ->
+		State#state{mouse= {X,Y}};
+	    #wx{event = #wxMouse{type = right_up,x=X,y=Y}} ->
+		State#state{mouse= {X,Y}};
 
 	    %% Key Events
-	    #wx{event = #wxKey{type = key_up,keyCode=Code}} ->
+	    #wx{event = #wxKey{type = key_up,keyCode=_Code}} ->
 		State#state{};
 	    #wx{event = #wxKey{type = key_down,keyCode=Code}} ->
 		_OldOrigin = Cam#cam.old_origin,
@@ -105,11 +102,11 @@ loop(State = #state{cam=Cam}) ->
 	    Any ->
 		io:format("~p\n", [Any]),
 		State#state{}
-	after 5 -> State#state{}
+	after 1 -> State#state{}
 	end,
     loop(draw(NewState)).
 
-move_object(M=#cam{origin=Origin={X,Y,Z},distance=Distance},Angle,Code) ->
+move_object(M=#cam{origin=Origin={X,Y,Z}},Angle,Code) ->
     case Code of
 	?WXK_UP ->
 	    {M#cam{origin={X,Y,Z-5},
@@ -131,34 +128,43 @@ move_object(M=#cam{origin=Origin={X,Y,Z},distance=Distance},Angle,Code) ->
 	    {M,Angle}
     end.
 
-change_camera(State=#state{mouse={{NewX,NewY},{OldX,OldY}},
-			   angle ={XAngle0,YAngle0}}) ->
-    X = (OldX - NewX),
-    Y = (OldY - NewY),
-    
-    Angle = XAngle0+X,
-    YAngle = YAngle0+Y,
-    NewXAngle =
-	if Angle > 360 -> Angle - 360;
-	   Angle < 0   -> Angle + 360;
-	   true -> Angle
-	end,
-    NewYAngle =
-	if YAngle > 360 -> YAngle - 360;
-	   YAngle < 0   -> YAngle + 360;
-	   true -> YAngle
-	end,
-    State2 = State#state{angle = {NewXAngle,NewYAngle}},
-    draw(State2),
-    State2.
+%% PAN
+change_camera(State=#state{mouse={OldX,OldY},
+			   cam = Cam=#cam{pan_x = PanX0,
+					  pan_y = PanY0,
+					  distance = D}},
+	      #wxMouse{shiftDown=true,x=X,y=Y}) ->
+    S = D*(1/10)/(100-float(?PAN_SPEED)),
+    Dx = (X-OldX)*S,
+    Dy = (Y-OldY)*S,
+
+    PanX = PanX0 + Dx,
+    PanY = PanY0 - Dy,
+%%    io:format("~p\n",[S]),
+    State#state{cam = Cam#cam{pan_x = PanX,
+			      pan_y = PanY},
+		mouse = {X,Y}};
+%% ZOOM (Dy)
+change_camera(State=#state{mouse={_OldX,OldY},
+			   cam = Cam=#cam{distance=Dist}},
+	      #wxMouse{controlDown=true,x=X,y=Y}) ->
+    State#state{cam = Cam#cam{distance=Dist+(Y-OldY)/10},
+		mouse = {X, Y}};
+%% Rotate
+change_camera(State=#state{mouse={OldX,OldY},
+			   cam = Cam=#cam{azimuth   = Az0,
+					  elevation = El0}},
+	      #wxMouse{x=X,y=Y}) ->
+    Az = Az0 + (X-OldX),
+    El = El0 + (Y-OldY),
+    State#state{cam = Cam#cam{azimuth   = Az,
+			      elevation = El},
+		mouse = {X,Y}}.
 
 
-draw(S=#state{canvas=Canvas, cam=Cam,time=T,font=F,draw=Draw,
-	      angle={XAngle,YAngle}}) ->
+draw(S=#state{canvas=Canvas, cam=Cam,time=T,draw=Draw}) ->
     gl:clear(?GL_COLOR_BUFFER_BIT bor ?GL_DEPTH_BUFFER_BIT),
     load_matrices(Cam, fun() -> lights() end),
-    gl:rotated(XAngle, 0.0, 1.0, 0.0),
-    gl:rotated(YAngle, 1.0, 0.0, 0.0),
     Draw(),
     wxGLCanvas:swapBuffers(Canvas),
     S#state{time=fps(T)}.
@@ -189,6 +195,7 @@ initg() ->
 	       end, [left_up,
 		     right_up,
 		     mousewheel,
+		     %%motion,
 		     middle_down,
 		     middle_up,
 		     key_down,
@@ -230,7 +237,7 @@ load(ObjF) ->
 	end,
 
     {DataChunk, Mats, ObjRefs} = ex1_parser:parse(ObjFile),
-    [Buff,Buff2] = gl:genBuffers(2),
+    [Buff] = gl:genBuffers(1),
     gl:bindBuffer(?GL_ARRAY_BUFFER,Buff),
     gl:bufferData(?GL_ARRAY_BUFFER, size(DataChunk), DataChunk, ?GL_STATIC_DRAW),
     gl:vertexPointer(3, ?GL_FLOAT, 8*4, 0),
@@ -254,7 +261,7 @@ load(ObjF) ->
 	  
 set_mat(Mat,Mats) ->
     case lists:keysearch(Mat,1,Mats) of
-	{value, {Mat,Diff,Amb,Spec,Emission,Shine,Maps}} -> 
+	{value, {Mat,Diff,Amb,Spec,Emission,Shine,_Maps}} -> 
 	    gl:materialfv(?GL_FRONT_AND_BACK, ?GL_DIFFUSE, Diff),
 	    gl:materialfv(?GL_FRONT_AND_BACK, ?GL_AMBIENT, Amb),
 	    gl:materialfv(?GL_FRONT_AND_BACK, ?GL_SPECULAR,Spec), 
@@ -271,10 +278,10 @@ set_mat(Mat,Mats) ->
 %%%%%%%%%%%% Camera 
 
 init(W,H) ->
-    #cam{origin    = {0.0,-10.0,0.0},
+    #cam{origin    = {0.0,0.0,0.0},
 	 old_origin= {0.0,0.0,0.0},
-	 azimuth   = -45.0,
-	 elevation =  25.0,
+	 azimuth   =  0.0,
+	 elevation =  0.0,
 	 distance  =  50,
 	 pan_x     =  0.0,
 	 pan_y     =  0.0,
@@ -316,7 +323,10 @@ modelview(#cam{origin={OX,OY,OZ},distance=Dist,azimuth=Az,
 	is_function(Lights) -> 	Lights();
 	true -> ok
     end,
+%    glu:lookAt(OX,OY,OZ, 0,0,0, 0,0,0),
     gl:translatef(PanX, PanY, -Dist),
+    gl:rotatef(El, 1.0, 0.0, 0.0),
+    gl:rotatef(Az, 0.0, 1.0, 0.0),
     gl:translatef(OX, OY, OZ),
     ok.
 
