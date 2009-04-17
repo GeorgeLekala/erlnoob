@@ -102,7 +102,7 @@ create_window(Wx) ->
     wxFrame:setStatusText(State#state.frame, "Score: 0"),
 
     wxWindow:show(Frame),
-    State#state.main_window_pid ! {options, State},
+    %%State#state.main_window_pid ! {options, State},
     State#state{frame = Frame,
 		panel = Panel,
 		status_bar = StatusBar}.

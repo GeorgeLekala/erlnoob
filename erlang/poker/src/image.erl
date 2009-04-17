@@ -10,7 +10,7 @@
 -include_lib("wx/include/wx.hrl"). 
 -include_lib("wx/include/gl.hrl"). 
 
--export([start/0]).
+-export([start/0,init/0]).
 
 -record(s,  {f,w1,w2,w3}).
 -record(img,{win, image, bmp}).
@@ -38,6 +38,7 @@ init() ->
     W1 = wxWindow:new(Frame, ?wxID_ANY, Opts),
     wxWindow:connect(W1, paint, [{skip, true}]),
     Image   = wxImage:new("../images/s1.png", [{type, ?wxBITMAP_TYPE_PNG}]),
+    GLAttrib = [{attribList, [?WX_GL_RGBA,?WX_GL_DOUBLEBUFFER,0]}],
     W2 = wxGLCanvas:new(Frame,Opts ++ GLAttrib),
     W3 = wxWindow:new(Frame, ?wxID_ANY, Opts),
     wxWindow:connect(W3, paint, [{skip, true}]),
