@@ -10,7 +10,7 @@
 
 -include_lib("wx/include/wx.hrl").
 -include_lib("wx/include/gl.hrl").
-%-include("../include/poker.hrl").
+%-include("poker.hrl").
 -define(RULES, 20).
 -define(ABOUT, 21).
 

@@ -110,14 +110,12 @@ move_object(M=#cam{origin=Origin={X,Y,Z}},Angle,Code) ->
     case Code of
 	?WXK_UP ->
 	    {M#cam{origin={X,Y,Z-5},
-		   old_origin=Origin%,
-		   %distance=Distance-5
-		  },Angle};
+		   old_origin=Origin},
+	     Angle};
 	?WXK_DOWN ->
 	    {M#cam{origin={X,Y,Z+5},
-		   old_origin=Origin%,
-		   %%distance=Distance+5
-		  },Angle};
+		   old_origin=Origin},
+	     Angle};
 	?WXK_ESCAPE ->
 	    exit(normal);
 	?WXK_LEFT ->
@@ -166,19 +164,31 @@ draw(S=#state{canvas=Canvas, cam=Cam,time=T,draw=Draw}) ->
     gl:clear(?GL_COLOR_BUFFER_BIT bor ?GL_DEPTH_BUFFER_BIT),
     load_matrices(Cam, fun() -> lights() end),
     Draw(),
+    draw_track(),
     wxGLCanvas:swapBuffers(Canvas),
     S#state{time=fps(T)}.
 
+draw_track() ->
+    gl:'begin'(?GL_QUADS),
+
+    gl:color3ub(1, 0, 0),
+
+    gl:vertex3f(10,0,10),
+    gl:vertex3f(0, 0,10),
+    gl:vertex3f(10,0,0),
+    gl:vertex3f(0, 0,0),
+
+    gl:'end'().
 lights() ->
     gl:lightModelfv(?GL_LIGHT_MODEL_AMBIENT, {0.1,0.1,0.1,1.0}),
     gl:enable(?GL_LIGHT0),
     gl:enable(?GL_LIGHT1),
-    gl:lightfv(?GL_LIGHT0, ?GL_DIFFUSE,  {0.7,0.7,0.7,0.0}), 
-    gl:lightfv(?GL_LIGHT0, ?GL_SPECULAR, {0.5,0.5,0.5,1}),
-    gl:lightfv(?GL_LIGHT0, ?GL_POSITION, {0.0,0.0,1.0,0.0}),
-    gl:lightfv(?GL_LIGHT1, ?GL_DIFFUSE,  {0.5,0.5,0.5,0.5}), 
-    gl:lightfv(?GL_LIGHT1, ?GL_SPECULAR, {0.3,0.3,0.3,1}),
-    gl:lightfv(?GL_LIGHT1, ?GL_POSITION, {-0.71,-0.71,0.0,0.0}).
+    gl:lightfv(?GL_LIGHT0, ?GL_DIFFUSE,  { 0.7,  0.7,  0.7, 0.0 }), 
+    gl:lightfv(?GL_LIGHT0, ?GL_SPECULAR, { 0.5,  0.5,  0.5, 1   }),
+    gl:lightfv(?GL_LIGHT0, ?GL_POSITION, { 0.0,  0.0,  1.0, 0.0 }),
+    gl:lightfv(?GL_LIGHT1, ?GL_DIFFUSE,  { 0.5,  0.5,  0.5, 0.5 }), 
+    gl:lightfv(?GL_LIGHT1, ?GL_SPECULAR, { 0.3,  0.3,  0.3, 1   }),
+    gl:lightfv(?GL_LIGHT1, ?GL_POSITION, {-0.71,-0.71, 0.0, 0.0 }).
 
 
 initg() ->
@@ -211,14 +221,13 @@ initg() ->
     
     gl:enable(?GL_LIGHTING),
     gl:shadeModel(?GL_SMOOTH),
-    gl:clearColor(0.2,0.2,0.9,1.0),
+    gl:clearColor(0.35,0.35,0.35,1.0),
     
     DefFont = undefined,
     #state{canvas=GLCanvas,
 	   font=DefFont,
 	   time=#time{},
 	   cam=init(?W,?H)}.
-
 
 
 load(ObjF) ->
