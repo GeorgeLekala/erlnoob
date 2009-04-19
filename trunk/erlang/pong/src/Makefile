@@ -6,7 +6,8 @@ ERL_FLAGS = -I$(ERLINC) +warn_unused_vars +debug_info
 MODULES = \
 	pong \
         pong_wxgui\
-	pong_logics
+	pong_logics\
+	pong_options
 
 INCLUDES =
 

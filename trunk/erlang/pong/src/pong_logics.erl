@@ -9,80 +9,42 @@
 
 -compile(export_all).
 
+-include("pong.hrl").
 
 %%%-------------------------------------------------------------------
 %%% get_new_pos(Pos, Angle) -> {NewPos, Angle}
 %%% Pos = NewPos = {integer(), integer()}
 %%% Angle = integer()
 %%%-------------------------------------------------------------------
-get_new_pos({X, Y}, Angle, Direction) ->
-    Radian = Angle*(math:pi()/180),
-    Ok =if
-	X>400; X<10 ->
-	    NewPos =
-		if
-		    X<10  -> {X+10, Y};
-		    X>400 -> {X-10, Y}
-		end,
-	    {NewAngle, NewDirection} = new_angle(Angle, Direction),
-	    io:format("X\nOld: ~p\nNew: ~p\n", [Angle,NewAngle]),
-	    get_new_pos(NewPos, NewAngle, NewDirection);
-	Y>200; Y<10 ->
-	    NewPos =
-		if
-		    Y>200 -> {X, Y-10};
-		    Y<10  -> {X, Y+10}
-		end,
-	    {NewAngle, NewDirection} = new_angle(Angle, Direction),
-	    io:format("Y\nOld: ~p\nNew: ~p\n", [Angle,NewAngle]),
-	    get_new_pos(NewPos, NewAngle, NewDirection);
-	X<200, X>10 ->
-	    {{round(X2 = X + 5 * math:cos(Radian)),
-	      round(Y2 = Y + 5 * math:sin(Radian))}, Angle, Direction};
-	Y<400,Y>10 -> 
-	    {{round(X2 = X + 5 * math:cos(Radian)),
-	      round(Y2 = Y + 5 * math:sin(Radian))}, Angle, Direction}
-    end,
-%%    io:format("~p\n", [Ok]),
-    Ok.
+get_new_pos({{X, PrevOpX}, {Y, PrevOpY}}) ->
+    NewX =
+	if X =< ?RECT_POS_X+?PEN_WIDTH ->
+		{X+7, $+};
+	   X > ?RECT_WIDTH+?RECT_POS_X-?PEN_WIDTH;
+	   PrevOpX =:= $- ->
+		{X-7, $-};
+	   true ->
+		{X+7, $+}
+	end,
+    NewY =
+	if Y =< ?RECT_POS_Y+?PEN_WIDTH ->
+		{Y+7, $+};
+	   Y > ?RECT_HEIGHT+?RECT_POS_Y-?PEN_WIDTH;
+	   PrevOpY =:= $- ->
+		{Y-7, $-};
+	   true ->
+		{Y+7, $+}
+	end,
+    {NewX, NewY}.
 
 
-new_angle(Angle, {Direction, Wall}) ->
-    case Direction of
-	nw ->
-	    case Wall of
-		up ->   {Angle-90,  {sw, left}};
-		left -> {Angle-540, {ne, up}}
-	    end;
-	sw ->
-	    case Wall of
-		left -> {180-Angle, {se, down}};
-		down -> {Angle-360, {nw, left}}
-	    end;
-	se ->
-	    case Wall of
-		right -> {Angle-180, {sw, down}};
-		down ->  {360-Angle, {ne, right}}
-	    end;
-	ne ->
-	    case Wall of
-		right -> {Angle-540, {nw, up}};
-		up ->    {Angle-360, {se, right}}
-	    end;
-	true ->
-	    io:format("Error", []),
-	    exit(error)
+
+check_player({Bx,By}, PlayerPos) ->
+    if By < PlayerPos+25,
+       By > PlayerPos-25 ->
+	    hit;
+       Bx > ?RECT_POS_X+?PEN_WIDTH+20 ->
+	    not_there;
+       true ->
+	    miss
     end.
-	
-%%     Max = 360,
-%%     NewAngle = Max - Angle,
-%%     NewAngle.
-
-
-
-%% calculate_bounce({BallX, BallY}, Angle) ->
-%%     K = (BallY - DirY) / (BallX - DirX),
-%%     %%X/(BallX-DirX),
-%%     io:format("~p\n", [K]),
-%%     {round((K*1)+BallX), round((K*1)+BallY)}.
-

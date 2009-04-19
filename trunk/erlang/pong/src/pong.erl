@@ -10,4 +10,4 @@
 -compile(export_all).
 
 start() ->
-    pong_wxgui:create_window().
+    pong_wxgui:create_main_window().

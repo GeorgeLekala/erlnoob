@@ -230,37 +230,25 @@ initg() ->
 	   cam=init(?W,?H)}.
 
 
-load(ObjF) ->
-    ObjFile = 
-	case file:read_file_info(ObjF) of
-	    {error, _} ->
-		Ext = case filename:extension(ObjF) of
-			  [] -> ".wex1";
-			  Else -> Else
-		      end,
-		Base = filename:basename(ObjF, Ext),
-		Root = util:get_root_dir(),
-		filename:join([Root,objs,Base++Ext]);
-	    _File ->
-		ObjF
-	end,
-
+load(ObjFile) when is_list(ObjFile) ->
     {DataChunk, Mats, ObjRefs} = ex1_parser:parse(ObjFile),
+
     [Buff] = gl:genBuffers(1),
     gl:bindBuffer(?GL_ARRAY_BUFFER,Buff),
     gl:bufferData(?GL_ARRAY_BUFFER, size(DataChunk), DataChunk, ?GL_STATIC_DRAW),
-    gl:vertexPointer(3, ?GL_FLOAT, 8*4, 0),
-    gl:normalPointer(?GL_FLOAT, 8*4, 3*4),
-    gl:texCoordPointer(2,?GL_FLOAT, 8*4, 6*4),
+
+    %%io:format("~p\n", [ObjRefs]),
     Draw = fun() ->
 		   gl:enableClientState(?GL_VERTEX_ARRAY),
 		   gl:enableClientState(?GL_NORMAL_ARRAY),
 		   gl:enableClientState(?GL_TEXTURE_COORD_ARRAY),
+		   gl:vertexPointer(3, ?GL_FLOAT, 8*4, 0),
+		   gl:normalPointer(?GL_FLOAT, 8*4, 3*4),
+		   gl:texCoordPointer(2,?GL_FLOAT, 8*4, 6*4),
+
 		   lists:foreach(fun({Mat,First,Sz}) ->
 					 set_mat(Mat,Mats),
-					 gl:bindBuffer(?GL_ARRAY_BUFFER,Buff),
-					 gl:drawArrays(?GL_TRIANGLES, First, Sz),
-					 gl:bindBuffer(?GL_ARRAY_BUFFER,0)
+					 gl:drawArrays(?GL_TRIANGLES, First, Sz)
 				 end, ObjRefs),
 		   gl:disableClientState(?GL_TEXTURE_COORD_ARRAY),
 		   gl:disableClientState(?GL_VERTEX_ARRAY),

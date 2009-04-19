@@ -72,7 +72,7 @@ loop(S,C) ->
 				    [{style,?wxICON_INFORMATION bor ?wxOK}]),
 	    wxMessageDialog:showModal(D),
 	    loop(S,C);
-	E=#wx{id=EXIT, event=EV} when EXIT =:= ?wxID_EXIT; is_record(EV, wxClose) ->
+	E=#wx{id=?wxID_EXIT, event=EV} when is_record(EV, wxClose) ->
 	    io:format("Got ~p~n", [E]),
 	    catch wxWindow:'Destroy'(S#s.f),
 	    ok;
