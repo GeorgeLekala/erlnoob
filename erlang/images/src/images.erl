@@ -16,10 +16,13 @@
 
 -compile(export_all).
 
--record(state, {canvas,
-		image}).
+-record(state, {frame,
+		image,
+		timer}).
 
--record(image, {data,
+-record(image, {image,
+		bmp,
+		pos = {0,0},
 		width,
 		height}).
 
@@ -45,60 +48,83 @@ init() ->
 
     wxFrame:setMenuBar(Frame, MenuBar),
     wxFrame:connect(Frame, command_menu_selected),
+    wxFrame:connect(Frame, motion),
 
-    
-    Attrs = [{attribList, [?WX_GL_RGBA,?WX_GL_DOUBLEBUFFER,0]}],
-    GLCanvas = wxGLCanvas:new(Frame, Attrs),
-    wxGLCanvas:connect(GLCanvas, paint),
+    SB = wxFrame:createStatusBar(Frame,[{number,2}]),
+    wxStatusBar:setStatusWidths(SB, [-1, 150]),
+
     
     wxFrame:show(Frame),
-    wxGLCanvas:setCurrent(GLCanvas),
 
-
-    gl:viewport(0,0,?W,?H),
-    
-    gl:enable(?GL_DEPTH_TEST),
-    gl:depthFunc(?GL_LEQUAL),
-    gl:enable(?GL_CULL_FACE),
-    
-    gl:enable(?GL_LIGHTING),
-    gl:shadeModel(?GL_SMOOTH),
-    gl:clearColor(1,0.3,0.3,0.5),
+    {ok, Timer} = timer:send_interval(40, update),
 
     File = "../image/erlang.gif",
     Image = wxImage:new(File, [{type, ?wxBITMAP_TYPE_GIF}]),
 
-    #state{canvas = GLCanvas,
-	   image = #image{data   = wxImage:getData(Image),
-			  width  = wxImage:getWidth(Image),
-			  height = wxImage:getHeight(Image)}}.
+    Width = wxImage:getWidth(Image),
+    Height = wxImage:getHeight(Image),
 
-draw(#state{canvas = Canvas,
-	    image = #image{data   = Data,
-			   width  = W,
-			   height = H}}) ->
-    gl:clear(?GL_COLOR_BUFFER_BIT),
-    gl:texImage2D(?GL_TEXTURE_2D, 0, 3, W, H, 5, ?GL_RGBA, ?GL_UNSIGNED_BYTE, Data),
-    wxGLCanvas:swapBuffers(Canvas).
+    #state{frame = Frame,
+	   timer = Timer,
+	   image = #image{image  = Image,
+			   pos    = {{40+Width, $+}, {510, $+}},
+			   width  = Width,
+			   height = Height}}.
+
+draw(State=#state{frame = Frame,
+		  image = Image}) ->
+    CDC  = wxClientDC:new(Frame),
+    DC = wxBufferedDC:new(CDC),
+    wxDC:clear(DC),
+    Image2 = draw_image(DC, Image),
+    wxBufferedDC:destroy(DC),
+    wxClientDC:destroy(CDC),
+    State#state{image=Image2}.
     
 
-loop(State=#state{image=Image}) ->
+draw_image(DC, Img=#image{image = Image,
+			  bmp = undefined}) ->
+    Bmp = wxBitmap:new(Image),
+    draw_image(DC, Img#image{bmp = Bmp});
+draw_image(DC, Image= #image{pos = {{X, PrevOpX}, {Y, PrevOpY}}}) ->
+    wxDC:drawBitmap(DC,Image#image.bmp, {X,Y}),
+    NewX =
+	if X =< 0 ->
+		{X+4, $+};
+	   X+Image#image.width > ?W-1;
+	   PrevOpX =:= $- ->
+		{X-4, $-};
+	   X >= 0 ->
+		{X+4, $+}
+	end,
+    NewY =
+	if Y =< 0 ->
+		{Y+4, $+};
+	   Y+Image#image.height > ?H-1;
+	   PrevOpY =:= $- ->
+		{Y-4, $-};
+	   Y >= 0 ->
+		{Y+4, $+}
+	end,
+    Image#image{pos = {NewX, NewY}}.
+
+loop(State=#state{}) ->
     receive
+	update ->
+	    State2 = draw(State),
+	    loop(State2);
 	#wx{id = ?wxID_NEW,
 	    event = #wxCommand{}} ->
-	    draw(State),
-	    io:format("Width: ~p\nHeight: ~p\n", [Image#image.width,Image#image.height]),
+	    loop(State);
+	#wx{event = #wxMouse{}} ->
 	    loop(State);
 	#wx{event = #wxPaint{}} ->
-	    draw(State),
 	    loop(State);
 	#wx{event = #wxClose{}} ->
-	    exit(close);
+	    timer:cancel(State#state.timer),
+	    close;
 	Any ->
 	    io:format("~p\n", [Any]),
-	    loop(State)
-    after 100 ->
-	    draw(State),
 	    loop(State)
     end.
 

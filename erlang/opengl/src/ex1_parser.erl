@@ -21,15 +21,9 @@ parse(Filename) ->
      _CreationInfo:120/binary>> = Header,
 
     %% Read DataChunk
-    <<DataChunk:DataChunkSize/binary, Body2/binary>> = Body,
-    
-    %% Read Materials
-    <<MaterialSize:32/little, Body3/binary>> = Body2,
-    <<MaterialBin:MaterialSize/binary, Body4/binary>> = Body3,
-
-    %% Read ObjectRef
-    <<ObjectRefSize:32/little, Body5/binary>> = Body4,
-    <<ObjectRefBin:ObjectRefSize/binary>> = Body5,
+    <<DataChunk:DataChunkSize/binary,
+     MaterialSize:32/little,MaterialBin:MaterialSize/binary,
+     ObjectRefSize:32/little,ObjectRefBin:ObjectRefSize/binary>> = Body,
 
     Materials = get_materials(MaterialBin),
     ObjRefs = get_objects(ObjectRefBin),
@@ -37,11 +31,8 @@ parse(Filename) ->
     {DataChunk, Materials, ObjRefs}.
 
 
-
-%% Read Material :: FIX ME - Needs implementation
 get_materials(Material) ->
     get_materials(Material, []).
-
 get_materials(<<NSz:32/little, Name:NSz/binary, 
 	       DR:32/float,DG:32/float,DB:32/float,DA:32/float,
 	       AR:32/float,AG:32/float,AB:32/float,AA:32/float,
