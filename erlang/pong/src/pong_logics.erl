@@ -16,35 +16,38 @@
 %%% Pos = NewPos = {integer(), integer()}
 %%% Angle = integer()
 %%%-------------------------------------------------------------------
-get_new_pos({{X, PrevOpX}, {Y, PrevOpY}}) ->
+get_new_pos(Court) ->
+    new_pos(Court).
+
+
+
+new_pos(#court{rect_width = RectWidth,
+		   rect_height = RectHeight,
+		   rect_x = RectX,
+		   rect_y = RectY,
+		   x_dir = XDir,
+		   y_dir = YDir,
+		   pen_width = PenWidth},
+	    {{X, PrevOpX}, {Y, PrevOpY}}) ->
     NewX =
-	if X =< ?RECT_POS_X+?PEN_WIDTH ->
-		{X+7, $+};
-	   X > ?RECT_WIDTH+?RECT_POS_X-?PEN_WIDTH;
+	if X =< RectX+PenWidth ->
+		{X+XDir, $+};
+	   X > RectWidth+RectX-PenWidth;
 	   PrevOpX =:= $- ->
-		{X-7, $-};
+		{X-XDir, $-};
 	   true ->
-		{X+7, $+}
+		{X+XDir, $+}
 	end,
     NewY =
-	if Y =< ?RECT_POS_Y+?PEN_WIDTH ->
-		{Y+7, $+};
-	   Y > ?RECT_HEIGHT+?RECT_POS_Y-?PEN_WIDTH;
+	if Y =< RectY+PenWidth ->
+		{Y+YDir, $+};
+	   Y > RectHeight+RectY-PenWidth;
 	   PrevOpY =:= $- ->
-		{Y-7, $-};
+		{Y-YDir, $-};
 	   true ->
-		{Y+7, $+}
+		{Y+YDir, $+}
 	end,
     {NewX, NewY}.
 
 
 
-check_player({Bx,By}, PlayerPos) ->
-    if By < PlayerPos+25,
-       By > PlayerPos-25 ->
-	    hit;
-       Bx > ?RECT_POS_X+?PEN_WIDTH+20 ->
-	    not_there;
-       true ->
-	    miss
-    end.
