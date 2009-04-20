@@ -11,43 +11,55 @@
 
 -include("pong.hrl").
 
-%%%-------------------------------------------------------------------
-%%% get_new_pos(Pos, Angle) -> {NewPos, Angle}
-%%% Pos = NewPos = {integer(), integer()}
-%%% Angle = integer()
-%%%-------------------------------------------------------------------
-get_new_pos(Court) ->
-    new_pos(Court).
+get_new_pos(Court, OldPos) ->
+    new_pos(Court, OldPos).
 
 
 
 new_pos(#court{rect_width = RectWidth,
-		   rect_height = RectHeight,
-		   rect_x = RectX,
-		   rect_y = RectY,
-		   x_dir = XDir,
-		   y_dir = YDir,
-		   pen_width = PenWidth},
-	    {{X, PrevOpX}, {Y, PrevOpY}}) ->
+	       rect_height = RectHeight,
+	       rect_x = RectX,
+	       rect_y = RectY,
+	       jump = Jump,
+	       pen_width = PenWidth},
+	Pos=#position{x = {X, PrevOpX},
+		      y = {Y, PrevOpY}}) ->
     NewX =
-	if X =< RectX+PenWidth ->
-		{X+XDir, $+};
-	   X > RectWidth+RectX-PenWidth;
+	if X =< RectX+PenWidth+23 ->
+		Me = self(),
+		Me ! player_reached,
+		{X+Jump, $+};
+	   X > RectWidth+RectX-PenWidth-23;
 	   PrevOpX =:= $- ->
-		{X-XDir, $-};
+		{X-Jump, $-};
 	   true ->
-		{X+XDir, $+}
+		{X+Jump, $+}
 	end,
     NewY =
 	if Y =< RectY+PenWidth ->
-		{Y+YDir, $+};
+		{Y+Jump, $+};
 	   Y > RectHeight+RectY-PenWidth;
 	   PrevOpY =:= $- ->
-		{Y-YDir, $-};
+		{Y-Jump, $-};
 	   true ->
-		{Y+YDir, $+}
+		{Y+Jump, $+}
 	end,
-    {NewX, NewY}.
+    Pos#position{x = NewX,
+		 y = NewY}.
 
 
+
+get_new_pos2(#court{jump = Jump},
+	     Pos = #position{x = X, y = Y,
+			     angle = Angle}) ->
+    Radian = Angle*(math:pi()/180),
+    NewAngle = if Angle =< 0 ->
+		       360 - Angle;
+		  true ->
+		       Angle
+	       end,
+    NewX = round(X + Jump * math:cos(Radian)),
+    NewY = round(Y + Jump * math:sin(Radian)),
+    Pos#position{x = NewX, y = NewY,
+		 angle = NewAngle}.
 
