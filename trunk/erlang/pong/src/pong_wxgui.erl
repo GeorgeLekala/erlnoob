@@ -58,7 +58,8 @@ create_main_window() ->
 
     State = #state{frame = Frame,
 		   canvas = Panel,
-		   ball_pos = {{200, $-},{100, $+}},
+		   ball_pos = #position{x = {200, $-},
+					y = {100, $+}},
 		   player = 200,
 		   court = #court{}},
     wxFrame:show(Frame),
@@ -78,13 +79,14 @@ create_canvas(State) ->
 
 loop(State) ->
     receive
-	{start, Interval, Speed} ->
-	    Court = State#state.court,
+	player_reached ->
+	    %%Court = State#state.court,
+	    State2 = State#state{},
+	    loop(State2);
+	{start, Interval, _Speed} ->
 	    timer:cancel(State#state.timer),
 	    {ok, Timer} = timer:send_interval(Interval, update),
-	    loop(State#state{court = Court#court{x_dir = Speed,
-						 y_dir = Speed},
-			     timer = Timer,
+	    loop(State#state{timer = Timer,
 			     options_pid = undefined});
 	update ->
 	    NewPos = pong_logics:get_new_pos(State#state.court,
@@ -126,8 +128,8 @@ loop(State) ->
 		    Pid ! close
 	    end,
 	    close;
-	Wx = #wx{} ->
-	    io:format("Got: ~p\n", [Wx]),
+	Any  ->
+	    io:format("Got: ~p\n", [Any]),
 	    loop(State)
     end.
     
@@ -152,7 +154,8 @@ borders(DC, State=#state{court = #court{rect_width = RectWidth,
     draw_ball(DC, State),
     draw_player(DC, State).
 
-draw_ball(DC, #state{ball_pos = {{X,_}, {Y,_}}}) ->
+draw_ball(DC, #state{ball_pos = #position{x = {X,_},
+					  y = {Y,_}}}) ->
     Pos = {X,Y},
     wxDC:drawCircle(DC, Pos, 5).
 

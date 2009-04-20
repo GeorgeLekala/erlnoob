@@ -25,8 +25,10 @@
 		rect_y		= ?RECT_POS_Y,
 		pen_width	= ?PEN_WIDTH,
 		player		= ?PLAYER,
-		x_dir = 4,
-		y_dir = 4}).
+		jump		= 4}).
 
 
+-record(position, {x,
+		   y,
+		   angle = 45}).
 
