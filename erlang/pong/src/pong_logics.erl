@@ -50,16 +50,17 @@ new_pos(#court{rect_width = RectWidth,
 
 
 get_new_pos2(#court{jump = Jump},
-	     Pos = #position{x = X, y = Y,
+	     Pos = #position{x = {X, PrevX}, y = {Y, PrevY},
 			     angle = Angle}) ->
     Radian = Angle*(math:pi()/180),
-    NewAngle = if Angle =< 0 ->
+    NewAngle = if Angle =< 0;
+		  Angle >= 360 ->
 		       360 - Angle;
 		  true ->
 		       Angle
 	       end,
     NewX = round(X + Jump * math:cos(Radian)),
     NewY = round(Y + Jump * math:sin(Radian)),
-    Pos#position{x = NewX, y = NewY,
+    Pos#position{x = {NewX, PrevX}, y = {NewY, PrevY},
 		 angle = NewAngle}.
 
