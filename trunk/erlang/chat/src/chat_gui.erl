@@ -85,12 +85,13 @@ loop(State) ->
 	    Message = lists:flatten([From, ": ", Msg, "\n"]),
 	    wxTextCtrl:appendText(State#state.in_ctrl, Message),
 	    ?MODULE:loop(State);
-	{connect, User} ->
-	    wxListCtrl:insertItem(State#state.users, 5001, User),
+	{connect, {Ip, Port}} ->
+	    wxListCtrl:insertItem(State#state.users, 5001, io_lob:format("{~p, ~p}", [Ip, Port])),
 	    ?MODULE:loop(State);
-	#wx{id = ?CONNECT} ->
-	    spawn_link(fun() -> connect_window() end ),
-	    ?MODULE:loop(State);
+	#wx{id = ?CONNECT}%% when State#state.connect =:= undefined ->
+	->
+	    Pid = spawn_link(fun() -> connect_window(State#state.main_pid) end ),
+	    ?MODULE:loop(State#state{connect = Pid});
 	#wx{event = #wxClose{}} ->
 	    exit(close);	    
 	#wx{id = ?wxID_EXIT} ->
@@ -104,21 +105,42 @@ loop(State) ->
 	    ?MODULE:loop(State)
     end.
 
-connect_window() ->
+connect_window(MainPid) ->
     Wx = wx:new(),
     Frame = wxFrame:new(Wx, ?wxID_ANY, "Connect", []),
+    wxFrame:connect(Frame, close_window, [{skip,true}]),
     
-    MainSizer = wxBoxSizer:new(?wxVERTICAL),
-    IpSizer = wxBoxSizer:new(?wxHORIZONTAL),
-    PortSizer = wxBoxSizer:new(?wxHORIZONTAL),
+    MainSizer = wxBoxSizer:new(?wxHORIZONTAL),
+    TextSizer = wxBoxSizer:new(?wxVERTICAL),
+    InputSizer = wxBoxSizer:new(?wxVERTICAL),
     
-    wxTextCtrl(),
+    IpText = wxStaticText:new(Frame, ?wxID_ANY, "IP", [{size, {100, 25}}]),
+    PortText = wxStaticText:new(Frame, ?wxID_ANY, "Port", [{size, {100, 25}}]),
+    Ip = wxTextCtrl:new(Frame, ?wxID_ANY, [{size, {100, 25}}]),
+    Port = wxTextCtrl:new(Frame, ?wxID_ANY, [{size, {100, 25}}]),
+
+    wxSizer:add(TextSizer, Ip),
+    wxSizer:add(TextSizer, Port),
+    wxSizer:add(InputSizer, IpText),
+    wxSizer:add(InputSizer, PortText),
+
+    Button = wxButton:new(Frame, ?wxID_OK, []),
+
+    wxSizer:add(MainSizer, TextSizer),
+    wxSizer:add(MainSizer, InputSizer),
+    wxSizer:add(MainSizer, Button),
+
+    wxPanel:setSizerAndFit(Frame, MainSizer),
+
 
     wxFrame:show(Frame),
-    connect_loop(#state{}).
+    connect_loop(#state{main_pid = MainPid}).
 
 connect_loop(State) ->
     receive
+	#wx{event = #wxClose{}} ->
+	    State#state.main_pid ! {connect, {ip, port}},
+	    exit;
 	_ ->
 	    connect_loop(State)
     end.
