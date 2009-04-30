@@ -55,13 +55,13 @@ loop(State) ->
 	    SelString = wxRadioBox:getString(State#state.radio_box,Selection),
 	    case SelString of
 		"Trivial" ->
-		    State#state.main_pid ! {start, 60, 1};
+		    State#state.main_pid ! {start, 60, 4};
 		"Easy" ->
-		    State#state.main_pid ! {start, 40, 1};
+		    State#state.main_pid ! {start, 40, 4};
 		"Hard" ->
-		    State#state.main_pid ! {start, 25, 1};
+		    State#state.main_pid ! {start, 25, 4};
 		"Insane" ->
-		    State#state.main_pid ! {start, 15, 2};
+		    State#state.main_pid ! {start, 15, 9};
 		Any ->
 		    io:format("No valid difficulty. ~p\n", [Any]),
 		    State#state.main_pid ! {start, 60, 5}

@@ -28,7 +28,7 @@ init() ->
     Wx = wx:new(),
     Frame = wxFrame:new(Wx, ?wxID_ANY, "erlChat", [{size, {600,400}}]),
     wxFrame:connect(Frame, close_window, [{skip,true}]),
-        wxFrame:connect(Frame, size, [{skip,true}]),
+    wxFrame:connect(Frame, size, [{skip,true}]),
 
     create_menu(Frame),
 
@@ -88,6 +88,9 @@ loop(State) ->
 	{connect, User} ->
 	    wxListCtrl:insertItem(State#state.users, 5001, User),
 	    ?MODULE:loop(State);
+	#wx{id = ?CONNECT} ->
+	    spawn_link(fun() -> connect_window() end ),
+	    ?MODULE:loop(State);
 	#wx{event = #wxClose{}} ->
 	    exit(close);	    
 	#wx{id = ?wxID_EXIT} ->
@@ -99,6 +102,25 @@ loop(State) ->
 	Any ->
 	    io:format("Any: ~p\n", [Any]),
 	    ?MODULE:loop(State)
+    end.
+
+connect_window() ->
+    Wx = wx:new(),
+    Frame = wxFrame:new(Wx, ?wxID_ANY, "Connect", []),
+    
+    MainSizer = wxBoxSizer:new(?wxVERTICAL),
+    IpSizer = wxBoxSizer:new(?wxHORIZONTAL),
+    PortSizer = wxBoxSizer:new(?wxHORIZONTAL),
+    
+    wxTextCtrl(),
+
+    wxFrame:show(Frame),
+    connect_loop(#state{}).
+
+connect_loop(State) ->
+    receive
+	_ ->
+	    connect_loop(State)
     end.
 
 
