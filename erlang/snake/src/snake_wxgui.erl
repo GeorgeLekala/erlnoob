@@ -33,28 +33,8 @@ init() ->
     Wx = wx:new(),
     State = wx:batch(fun() -> create_window(Wx) end),
 %%     Pid = spawn_link(fun() -> init_refresh_grid(State) end),
-    State2 = options_window(State),
-    loop(State2).
+    loop(State).
 
-options_window(State) ->
-    Wx = wx:new(),
-    Frame = wxFrame:new(Wx, ?wxID_ANY, "Options", []),
-    Panel = wxPanel:new(Frame, []),
-    Sizer = wxBoxSizer:new(?wxVERTICAL),
-    List = 
-	[wxRadioButton:new(Panel, ?TRIVIAL, "Trivial"),
-	 wxRadioButton:new(Panel, ?EASY, "Easy"),
-	 wxRadioButton:new(Panel, ?NORMAL, "Normal"),
-	 wxRadioButton:new(Panel, ?HARD, "Hard"),
-	 wxRadioButton:new(Panel, ?HARDEST, "Hardest")],
-    
-    wx:foreach(fun(Item) ->
-			  wxSizer:add(Sizer, Item)
-		  end,
-		  List),
-
-    wxWindow:show(Frame),
-    State.
 
 create_window(Wx) ->
     Frame = wxFrame:new(Wx, ?wxID_ANY, "erlSnake", []),
@@ -128,7 +108,11 @@ create_grid(State = #state{panel = Panel,
 
     wxGrid:enableGridLines(Grid, [{enable, false}]),
 
-    Click = fun(Type) -> wxGrid:connect(Grid, Type, [{callback, fun() -> ok end}]) end,
+    Click = fun(Type) ->
+		    wxGrid:connect(Grid, Type, [{callback, fun(_, _) ->
+								   ok
+							   end}])
+	    end,
     lists:foreach(Click, [grid_cell_left_click, grid_cell_left_dclick,
  			  grid_cell_right_click, grid_cell_right_dclick,
 			  grid_cell_begin_drag]),
@@ -184,8 +168,7 @@ loop(State) ->
 	    loop(check_tail(State2#state{mode = available}));
 	game_over ->
 	    timer:cancel(State#state.timer),
-	    spawn_link(snake_logics, highscore, [State#state.score,
-						    State#state.main_window_pid]),
+	    wxDialog:new(State#state.frame, ?wxID_ANY, "Game Over", []),
 	    loop(State#state{score = 0});
 	#wx{event = #wxClose{}} ->
 	    timer:cancel(State#state.timer),
