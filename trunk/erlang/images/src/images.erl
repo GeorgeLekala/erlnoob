@@ -54,6 +54,7 @@ init() ->
     wxFrame:setMenuBar(Frame, MenuBar),
     wxFrame:connect(Frame, command_menu_selected),
     wxFrame:connect(Frame, motion),
+    wxFrame:connect(Frame, left_down),
     wxFrame:connect(Frame, left_up),
 
     SB = wxFrame:createStatusBar(Frame,[{number,2}]),
@@ -85,34 +86,42 @@ init() ->
 			  height = Height}}.
 
 draw(State=#state{frame = Frame,
-		  mouse = {X, _},
-		  balls = Balls,
-		  image = Image}) ->
+		  mouse = {X, _}}) ->
     CDC  = wxClientDC:new(Frame),
     DC = wxBufferedDC:new(CDC),
     wxDC:clear(DC),
     wxDC:setBrush(DC, State#state.brush),
     wxDC:setPen(DC, State#state.pen),
     wxDC:drawRectangle(DC, {X, 500}, {50, 10}),
-    Balls2 = draw_balls(DC, Balls),
-    Image2 = draw_image(DC, Image),
+    State2 = draw_image(DC, State),
     wxBufferedDC:destroy(DC),
     wxClientDC:destroy(CDC),
-    State#state{image=Image2,balls = Balls2}.
+    State2.
     
-draw_balls(DC, Balls) ->
-    draw_balls(DC, Balls, []).
-draw_balls(DC, [{X, Y}|Balls], Acc) ->
-    if Y > 0 ->
+draw_balls(DC, Balls, Im) ->
+    draw_balls(DC, Balls,Im, [], false).
+draw_balls(DC, [{X, Y}|Balls], Im={ImX,ImW,ImH}, Acc, Result) ->
+    if X >= ImX,
+       X =< ImX+ImW,
+       Y =< ImH ->
+	    draw_balls(DC, Balls, Im, Acc, true);
+	Y > 0 ->
 	    wxDC:drawCircle(DC, {X,Y}, 5),
-	    draw_balls(DC, Balls, [{X,Y-10}|Acc]);
+	    draw_balls(DC, Balls, Im, [{X,Y-40}|Acc], Result);
        true ->
-	    draw_balls(DC, Balls, Acc)
+	    draw_balls(DC, Balls, Im, Acc, Result)
     end;
-draw_balls(_, [], Acc) ->
-    Acc.
+draw_balls(_, [], _, Acc, Result) ->
+    {Acc, Result}.
 
-draw_image(DC, Image= #image{pos = {{X, PrevOpX}, {Y, PrevOpY}}}) ->
+draw_image(DC, State = #state{image =Image,
+			      balls = Balls}) ->
+    {Image2, Balls2} = draw_image(DC, Image, Balls),
+    State#state{image = Image2,
+		balls = Balls2}.
+
+draw_image(DC, Image= #image{pos = {{X, PrevOpX}, {Y, PrevOpY}},
+			     width = W,height = H}, Balls) ->
     wxDC:drawBitmap(DC,Image#image.bmp, {X,Y}),
     NewX =
 	if X =< 0 ->
@@ -123,7 +132,13 @@ draw_image(DC, Image= #image{pos = {{X, PrevOpX}, {Y, PrevOpY}}}) ->
 	   X >= 0 ->
 		{X+4, $+}
 	end,
-    Image#image{pos = {NewX, {Y, PrevOpY}}}.
+    case draw_balls(DC, Balls, {X,W,H}) of
+	{Balls2, true} ->
+	    {Image,Balls2};
+	{Balls2, false} ->
+	    {Image#image{pos = {NewX, {Y, PrevOpY}}},
+	     Balls2}
+    end.
 
 loop(State=#state{}) ->
     receive
@@ -137,6 +152,8 @@ loop(State=#state{}) ->
 	    loop(State#state{mouse = {X, Y}});
 	#wx{event = #wxMouse{type = left_up, x = X}} ->
 	    loop(State#state{balls = [{X+20,500}|State#state.balls]});
+	#wx{event = #wxMouse{type = left_down, x = X}} ->
+	    loop(State#state{balls = [{X+20,500}|State#state.balls]});
 	#wx{event = #wxPaint{}} ->
 	    loop(State);
 	#wx{event = #wxClose{}} ->
@@ -145,5 +162,8 @@ loop(State=#state{}) ->
 	Any ->
 	    io:format("~p\n", [Any]),
 	    loop(State)
+    after 30 ->
+	    {X,_Y} = State#state.mouse,
+	    loop(State#state{balls = [{X+20,500}|State#state.balls]})
     end.
 
