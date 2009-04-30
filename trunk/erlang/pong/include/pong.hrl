@@ -25,7 +25,7 @@
 		rect_y		= ?RECT_POS_Y,
 		pen_width	= ?PEN_WIDTH,
 		player		= ?PLAYER,
-		jump		= 4}).
+		jump		= 9}).
 
 
 -record(position, {x,
