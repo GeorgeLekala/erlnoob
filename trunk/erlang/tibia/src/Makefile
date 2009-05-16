@@ -4,9 +4,9 @@ ERLINC = ../include
 ERL_FLAGS = -I$(ERLINC) +warn_unused_vars +debug_info
 
 MODULES = \
-	chat_gui \
-	chat_server \
-	chat_gui_connect
+	tibia_proxy\
+	tibia_parse\
+	xtea
 
 INCLUDES =
 
