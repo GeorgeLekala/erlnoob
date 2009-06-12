@@ -14,4 +14,94 @@
 
 -define(UINT, unsigned-integer-little).
 
+
+-define(LOGIN_PROTOCOL, 16#01).
+-define(GAME_PROTOCOL, 16#0A).
+
+
+-record(state, {server_socket,
+		client_socket,
+		key,
+		account}).
 -record(key, {k1,k2,k3,k4}).
+
+-record(tries, {ip,tries}).
+
+-record(node, {type,data,children}).
+
+-record(account, {id,
+		  name,
+		  password,
+		  premdays,
+		  lastday,
+		  email,
+		  key,
+		  blocked,
+		  warnings,
+		  group_id,
+		  page_lastday,
+		  email_new,
+		  email_new_time,
+		  created,
+		  rlname,
+		  location,
+		  page_access,
+		  email_code,
+		  next_email,
+		  premium_points}).
+
+
+
+-record(player, {id,
+		 name,
+		 world_id,
+		 group_id,
+		 account_id,
+		 level,
+		 vocation,
+		 health,
+		 healthmax,
+		 experience,
+		 lookbody,
+		 lookfeet,
+		 lookhead,
+		 looklegs,
+		 looktype,
+		 lookaddons,
+		 maglevel,
+		 mana,
+		 manamax,
+		 manaspent,
+		 soul,
+		 town_id,
+		 posx,
+		 posy,
+		 posz,
+		 conditions,
+		 cap,
+		 sex,
+		 lastlogin,
+		 lastip,
+		 save,
+		 redskull,
+		 redskulltime,
+		 rank_id,
+		 guildnick,
+		 lastlogout,
+		 blessings,
+		 balance,
+		 stamina,
+		 direction,
+		 loss_experience,
+		 loss_mana,
+		 loss_skills,
+		 loss_items,
+		 premend,
+		 online,
+		 marriage,
+		 promotion,
+		 deleted,
+		 created,
+		 nick_verify,
+		 hide_char,
+		 comment}).

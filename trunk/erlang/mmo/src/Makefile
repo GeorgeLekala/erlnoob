@@ -4,13 +4,7 @@ ERLINC = ../include
 ERL_FLAGS = -I$(ERLINC) +warn_unused_vars +debug_info
 
 MODULES = \
-	tibia_proxy\
-	tibia_parse\
-	tibia_login\
-	tibia_iomap\
-	tibia_items\
-	tibia_files\
-	xtea
+	mmo
 
 INCLUDES =
 
