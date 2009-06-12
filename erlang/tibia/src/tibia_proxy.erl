@@ -16,13 +16,29 @@
 -define(SERVER_IP, "localhost").
 
 
--record(state, {server_socket,
-		client_socket,
-		key}).
+install() ->
+    mnesia:create_schema([node()]),
+    mnesia:start(),
+    mnesia:create_table(tries, [{type,set},
+				{attributes, record_info(fields,tries)}]),
+    mnesia:create_table(account, [{type,ordered_set},
+				  {attributes, record_info(fields,account)},
+				  {disc_copies, [node()]}]),
+    mnesia:create_table(player, [{type,ordered_set},
+				 {attributes, record_info(fields,player)},
+				 {disc_copies, [node()]}]).
+
+    
 
 
 start() ->
     spawn_link(fun() -> tcp_start(?PROXY_PORT) end),
+    crypto:start(),
+    mnesia:start(),
+    ok.
+
+start(Port) ->
+    spawn_link(fun() -> tcp_start(Port) end),
     crypto:start(),
     mnesia:start(),
     ok.
@@ -59,21 +75,29 @@ tcp_loop(State=#state{client_socket = ClientSocket,
     inet:setopts(ClientSocket, [{active, once}]),
     inet:setopts(ServerSocket, [{active, once}]),
     receive
-	{tcp, ServerSocket,Msg= <<Len:16/unsigned-integer-little,
-				 Data:Len/binary>>} when Len =:= 84 ->
-	    %%parse_server_message(State#state.key, Data),
-	    gen_tcp:send(ClientSocket, Msg),
-	    ?MODULE:tcp_loop(State);
-	{tcp, ServerSocket, Data} ->
-	    gen_tcp:send(ClientSocket, Data),
-	    ?MODULE:tcp_loop(State);
-	{tcp, ClientSocket, Data} ->
-	    %%Key = tibia_parse:parse_package(Data),
+	{tcp, ServerSocket, <<Len:16/?UINT,Data:Len/binary>>} ->
+	    State2 = tibia_parse:parse_server_packet(State, Data),
+	    ?MODULE:tcp_loop(State2);
+
+	{tcp, ClientSocket, Packet = <<Len:16/?UINT,Data:Len/binary>>} ->
+	    State2 = tibia_parse:parse_client_packet(State, Data),
+	    gen_tcp:send(ServerSocket, Packet),
+	    ?MODULE:tcp_loop(State2);
+
+	{tcp, ClientSocket, <<Len:16/?UINT,Data1/binary>>} ->
+	    Size = size(Data1),
+	    {ok, Data2} = gen_tcp:recv(ClientSocket, Len-Size),
+	    Data = <<Data1/binary,Data2/binary>>,
+	    State2 = tibia_parse:parse_client_packet(State, Data),
 	    gen_tcp:send(ServerSocket, Data),
-	    ?MODULE:tcp_loop(State);%#state{key = Key});
-	{tcp, ClientSocket, Data} ->
-	    gen_tcp:send(ServerSocket, Data),
-	    ?MODULE:tcp_loop(State);
+	    ?MODULE:tcp_loop(State2);
+
+	{tcp, ServerSocket, <<Len:16/?UINT,Data1/binary>>} ->
+	    Size = size(Data1),
+	    {ok, Data2} = gen_tcp:recv(ServerSocket, Len-Size),
+	    Data = <<Data1/binary,Data2/binary>>,
+	    State2 = tibia_parse:parse_server_packet(State, Data),
+	    ?MODULE:tcp_loop(State2);
 	{tcp_closed, ServerSocket} ->
 	    gen_tcp:close(ClientSocket),
 	    ok;
@@ -85,14 +109,26 @@ tcp_loop(State=#state{client_socket = ClientSocket,
 	    ?MODULE:tcp_loop(State)
     end.
 
+verify_checksum(PacketChecksum, Message) ->
+    MsgChecksum = erlang:adler32(Message),
+    if PacketChecksum =:= MsgChecksum ->
+	    io:format("Checksum matches. ~p\n", [MsgChecksum]),
+	    true;
+       true ->
+	    io:format("Checksum doesn't match.\n"),
+	    false
+    end.
 
-    
-parse_server_message(#key{k1 = K1, k2 = K2, k3 = K3, k4 = K4}, Msg) ->
-    io:format("D: ~p\n", [xtea:decrypt(Msg, [K1,K2,K3,K4])]).
 
-%%io:format("MotdSize: ~p\n", [Msg]).
-
-
-gcd(A,0) -> A;
-gcd(A,B) -> gcd(B, A rem B).
-
+disconnect(#state{client_socket = ClientSocket,
+		  server_socket = ServerSocket,
+		  key = Key}, Error) ->
+    Reply = xtea:encrypt(Key, <<(size(Error)+3):16/?UINT,16#0A:8/?UINT,
+			       (size(Error)):16/?UINT, Error/binary>>),
+    Reply2 = <<(size(Reply)+4):16/?UINT,
+	      (erlang:adler32(Reply)):32/?UINT,
+	      Reply/binary>>,
+    gen_tcp:send(ClientSocket, Reply2),
+    gen_tcp:close(ClientSocket),
+    gen_tcp:close(ServerSocket),
+    exit(disconnect).
