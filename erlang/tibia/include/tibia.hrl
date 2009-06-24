@@ -27,7 +27,9 @@
 
 -record(tries, {ip,tries}).
 
--record(node, {type,data,children}).
+-record(node, {type,
+	       data = <<>>,
+	       children = []}).
 
 -record(account, {id,
 		  name,
