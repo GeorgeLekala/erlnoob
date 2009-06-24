@@ -115,11 +115,11 @@ load(Filename) ->
     {Header,Data2} = get_header(Data),
     
     #map{header = Header,
-	 data = Data2}.
-    %%load_map(Data2).
+	 data = Data2},
+    file:write_file("test.log", io_lib:format("~p", [load_map(Data2)])).
 
 open(Filename) ->	
-    {ok, <<0:32/?UINT,File/binary>>} = file:read_file(Filename),
+    {ok, File} = file:read_file(Filename),
     tibia_files:parse_file(File).
 
 
@@ -148,29 +148,57 @@ get_tiles(Nodes, Base) ->
 get_tiles([], _Base, Acc) ->
     Acc;
 get_tiles([#node{type = ?OTBM_TILE,data = Data,children = Children}|Tiles], Base, Acc) ->
-    <<X:8/?UINT,Y:8/?UINT,Rest/binary>> = Data,
-    Attributes = get_tile_attributes(Rest),
-    get_tiles(Tiles,Base,[#tile{x = Base#tile.x + X,
-				y = Base#tile.y + Y,
-				z = Base#tile.z,
-				type  = proplists:get_value(item, Attributes),
-				items = get_items(Children),
-				flags = proplists:get_value(flags, Attributes)}|Acc]);
+    try <<X:8/?UINT,Y:8/?UINT,Rest/binary>> = Data,
+	Attributes = get_tile_attributes(Rest),
+	get_tiles(Tiles,Base,[#tile{x = Base#tile.x + X,
+				    y = Base#tile.y + Y,
+				    z = Base#tile.z,
+				    type  = proplists:get_value(item, Attributes),
+				    items = get_items(Children),
+				    flags = proplists:get_value(flags, Attributes)}|Acc])
+    catch _:_ -> get_tiles(Tiles, Base, Acc)
+    end;
 get_tiles([#node{type = ?OTBM_HOUSETILE,data = Data,children = Children}|Tiles], Base, Acc) ->
-    <<X:8/?UINT,Y:8/?UINT,HouseId:32/?UINT,Rest/binary>> = Data,
-    Attributes = get_tile_attributes(Rest),
-    get_tiles(Tiles,Base,[#tile{x = Base#tile.x + X,
-				y = Base#tile.y + Y,
-				z = Base#tile.z,
-				house_id = HouseId,
-				type  = proplists:get_value(item, Attributes),
-				items = get_items(Children),
-				flags = proplists:get_value(flags, Attributes)}|Acc]).
+    try <<X:8/?UINT,Y:8/?UINT,HouseId:32/?UINT,Rest/binary>> = Data,
+	Attributes = get_tile_attributes(Rest),
+	get_tiles(Tiles,Base,[#tile{x = Base#tile.x + X,
+				    y = Base#tile.y + Y,
+				    z = Base#tile.z,
+				    house_id = HouseId,
+				    type  = proplists:get_value(item, Attributes),
+				    items = get_items(Children),
+				    flags = proplists:get_value(flags, Attributes)}|Acc])
+    catch _:_ -> get_tiles(Tiles, Base, Acc)
+    end;
+get_tiles([#node{}|Tiles], Base,Acc) ->
+    get_tiles(Tiles, Base, Acc).
 
-    
+
+
+
+get_tile_attributes(Data) ->
+    get_tile_attributes(Data, []).
+
+get_tile_attributes(<<>>, Acc) ->
+    Acc;
+get_tile_attributes(<<Attr:8/?UINT,Rest/binary>>, Acc) ->
+    case Attr of
+	?OTBM_ATTR_ITEM ->
+	    <<ItemID:16/?UINT,Rest2/binary>> = Rest,
+	    get_tile_attributes(Rest2, [{item, #item{id = ItemID}}|Acc]);
+	?OTBM_ATTR_TILE_FLAGS ->
+	    <<Flags:32/?UINT,Rest2/binary>> = Rest,
+	    get_tile_attributes(Rest2, [{flags, Flags}|Acc]);
+	_ ->
+	    io:format("~p\n", [Attr]),
+	    get_tile_attributes(Rest,Acc)
+    end.
+
 get_items(Nodes) ->
     get_items(Nodes, []).
 
+get_items(undefined, Acc) ->
+    Acc;
 get_items([], Acc) ->
     Acc;
 get_items([#node{type = ?OTBM_ITEM,data = Data}|Nodes], Acc) ->
@@ -184,7 +212,9 @@ get_items([#node{type = ?OTBM_ITEM,data = Data}|Nodes], Acc) ->
 	end
     catch _:_ ->
 	  get_items(Nodes, Acc)
-    end.
+    end;
+get_items([#node{}|Nodes], Acc) ->
+    get_items(Nodes,Acc).
 
 get_item_attributes(Item, <<>>)  ->
     Item;
@@ -256,31 +286,12 @@ get_item_attributes(Item, <<Attr:8/?UINT,Rest/binary>>)  ->
 	?OTBM_ATTR_TELE_DEST ->
 	    <<X:16/?UINT,Y:16/?UINT,Z:8/?UINT,Rest2/binary>> = Rest,
 	    get_item_attributes(Item#item{tele_destination = #tile{x=X,y=Y,z=Z}}, Rest2)
-
 	    
     end.
 
 
 
 
-
-
-
-get_tile_attributes(Data) ->
-    get_tile_attributes(Data, []).
-
-get_tile_attributes(<<>>, Acc) ->
-    Acc;
-get_tile_attributes(<<Attr:8/?UINT,Rest/binary>>, Acc) ->
-    case Attr of
-	?OTBM_ATTR_ITEM ->
-	    <<ItemID:16/?UINT,Rest2/binary>> = Rest,
-	    get_tile_attributes(Rest2, [{item, #item{id = ItemID}}|Acc]);
-	?OTBM_ATTR_TILE_FLAGS ->
-	    <<Flags:32/?UINT,Rest2/binary>> = Rest,
-	    get_tile_attributes(Rest2, [{flags, Flags}|Acc])
-    end.
-	    
 
 
 get_header([#node{type = 0,

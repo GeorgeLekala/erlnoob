@@ -16,41 +16,75 @@
 -define(ESCAPE_CHAR, 253).
 
 
-parse_file(Data) ->
-    parse_file(Data, [],0).
+p() ->
+    {ok, Data} = file:read_file("test.otbm"),
+    parse(Data).
+
+p(Filename) ->
+    {ok, Data} = file:read_file(Filename),
+    parse(Data).
+
+parse(Data) ->
+    try parse_file(Data)
+    catch
+	throw:Reason ->
+	    {error, Reason}
+    end.
 
 
-parse_file(<<>>, Nodes,C) ->
-    io:format("Count: ~p\n", [C]),
-    lists:reverse(Nodes);
-parse_file(<<Byte:8/?UINT,Rest/binary>>, Nodes,C) ->
-    case Byte of
-	?NODE_START ->
-	    {Node, Rest2} = get_node(Rest),
-	    parse_file(Rest2, [Node|Nodes],C);
-	?NODE_END ->
-	    parse_file(Rest, Nodes,C+1);
-	?ESCAPE_CHAR ->
-	    parse_file(Rest, Nodes, C);
-	_ ->
-	    parse_file(Rest, Nodes,C)
+parse_file(<<Version:32/?UINT,?NODE_START:8/?UINT,Type:1/binary,Rest/binary>>) ->
+    if Version > 0 ->
+	    throw(wrong_version);
+       true ->
+	    parse_nodes(Rest, #node{type=Type})
+	    
+    end.
     
-    end.
 
-get_node(<<Type:8/?UINT,Rest/binary>>) ->
-    get_node(#node{type = Type}, Rest, <<>>, []).
 
-get_node(Node, <<>>, Acc, Nodes) ->
-    {[Node#node{data = Acc}|Nodes], <<>>};
-get_node(Node, <<Byte:8/?UINT,Rest/binary>>, Acc, Nodes) ->
-    case Byte of
-	?NODE_END ->
-	    {Node#node{children = lists:reverse(Nodes),
-		       data = Acc}, Rest};
-	?NODE_START ->
-	    {Node2, Rest3} = get_node(Rest),
-	    get_node(Node,Rest3, Acc, [Node2|Nodes]);
-	_ ->
-	    get_node(Node,Rest,<<Acc/binary,Byte:8/?UINT>>, Nodes)
-    end.
 
+
+parse_nodes(Data, Node) ->
+    {<<>>, Nodes} = parse_nodes(Data, Node, []),
+    Nodes.
+
+parse_nodes(<<>>, Node, Nodes) ->
+    {<<>>, Node#node{children = lists:reverse(Nodes)}};
+parse_nodes(<<?ESCAPE_CHAR:8/?UINT,_,Rest/binary>>, Node, Nodes) ->
+    parse_nodes(Rest, Node,Nodes);
+parse_nodes(<<?NODE_END:8/?UINT,Rest/binary>>, Node, Nodes) ->
+    {Rest, Node#node{children = lists:reverse(Nodes)}};
+parse_nodes(<<?NODE_START:8/?UINT,Type:1/binary, Rest/binary>>, Node, Nodes) ->
+    {Rest2, Node2} = parse_nodes(Rest, #node{type=Type}, []),
+    parse_nodes(Rest2, Node, [Node2|Nodes]);
+parse_nodes(<<Byte, Rest/binary>>, Node=#node{data=Data}, Nodes) ->
+    parse_nodes(Rest, Node#node{data = <<Data/binary,Byte>>}, Nodes).
+
+
+count_nodes(File) when is_list(File) ->
+    {ok, Data} = file:read_file(File),
+    count_nodes(Data);
+count_nodes(Data) when is_binary(Data) ->
+    count_nodes(Data, 0).
+
+count_nodes(<<>>, NumNodes) ->
+    NumNodes;
+count_nodes(<<?NODE_START:8/?UINT, Rest/binary>>, NumNodes) ->
+    count_nodes(Rest, NumNodes+1);
+count_nodes(<<_,Rest/binary>>, NumNodes) ->
+    count_nodes(Rest, NumNodes).
+
+
+gen_file(Data) ->
+    <<0:32/?UINT,(gen_file(Data,<<>>,0))/binary>>.
+
+gen_file([], Index, Counter) ->
+    Index;
+gen_file([#node{type = Type,
+		data = Data,
+		children = Children}|Nodes], Index, Counter) ->
+    Children2 = gen_file(Children, <<>>, 0),
+    gen_file(Nodes,
+	     <<Index/binary,?NODE_START:8/?UINT,Type/binary,
+	      Data/binary,Children2/binary,?NODE_END:8/?UINT>>,
+	     Counter+1).
