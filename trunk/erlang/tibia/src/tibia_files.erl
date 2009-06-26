@@ -7,84 +7,81 @@
 %%%-------------------------------------------------------------------
 -module(tibia_files).
 
--compile(export_all).
+-export([parse/1,gen_file/1]).
 
 -include("tibia.hrl").
 
--define(NODE_START, 254).
--define(NODE_END, 255).
--define(ESCAPE_CHAR, 253).
-
-
-p() ->
-    {ok, Data} = file:read_file("test.otbm"),
-    parse(Data).
-
-p(Filename) ->
-    {ok, Data} = file:read_file(Filename),
-    parse(Data).
-
-parse(Data) ->
-    try parse_file(Data)
+parse(File) ->
+    {ok, Data} = file:read_file(File),
+    try parse_data(Data)
     catch
 	throw:Reason ->
 	    {error, Reason}
     end.
 
 
-parse_file(<<Version:32/?UINT,?NODE_START:8/?UINT,Type:1/binary,Rest/binary>>) ->
+parse_data(<<Version:32/?UINT,Rest/binary>>) ->
     if Version > 0 ->
 	    throw(wrong_version);
        true ->
-	    parse_nodes(Rest, #node{type=Type})
+	    parse_nodes(Rest)
 	    
     end.
-    
 
 
-
-
-parse_nodes(Data, Node) ->
-    {<<>>, Nodes} = parse_nodes(Data, Node, []),
-    Nodes.
+parse_nodes(<<?NODE_START:8/?UINT,Type,Rest/binary>>) ->
+    {<<>>, Node} = parse_nodes(Rest, #node{type=Type}, []),
+    Node.
 
 parse_nodes(<<>>, Node, Nodes) ->
     {<<>>, Node#node{children = lists:reverse(Nodes)}};
-parse_nodes(<<?ESCAPE_CHAR:8/?UINT,_,Rest/binary>>, Node, Nodes) ->
-    parse_nodes(Rest, Node,Nodes);
-parse_nodes(<<?NODE_END:8/?UINT,Rest/binary>>, Node, Nodes) ->
+parse_nodes(<<?NODE_END,Rest/binary>>, Node, Nodes) ->
     {Rest, Node#node{children = lists:reverse(Nodes)}};
-parse_nodes(<<?NODE_START:8/?UINT,Type:1/binary, Rest/binary>>, Node, Nodes) ->
+parse_nodes(<<?NODE_START,Type, Rest/binary>>, Node, Nodes) ->
     {Rest2, Node2} = parse_nodes(Rest, #node{type=Type}, []),
     parse_nodes(Rest2, Node, [Node2|Nodes]);
+parse_nodes(<<?ESCAPE_CHAR,Byte:1/binary,Rest/binary>>, Node=#node{data=Data}, Nodes) ->
+    parse_nodes(Rest, Node#node{data= <<Data/binary,Byte/binary>>},Nodes);
 parse_nodes(<<Byte, Rest/binary>>, Node=#node{data=Data}, Nodes) ->
     parse_nodes(Rest, Node#node{data = <<Data/binary,Byte>>}, Nodes).
 
 
-count_nodes(File) when is_list(File) ->
-    {ok, Data} = file:read_file(File),
-    count_nodes(Data);
-count_nodes(Data) when is_binary(Data) ->
-    count_nodes(Data, 0).
+gen_file(#node{type=Type,data=Data,children=Children}) ->
+    <<0:32/?UINT,
+     ?NODE_START,
+     Type,
+     (gen_data(Data))/binary,
+     (gen_file(Children,<<>>))/binary>>.
 
-count_nodes(<<>>, NumNodes) ->
-    NumNodes;
-count_nodes(<<?NODE_START:8/?UINT, Rest/binary>>, NumNodes) ->
-    count_nodes(Rest, NumNodes+1);
-count_nodes(<<_,Rest/binary>>, NumNodes) ->
-    count_nodes(Rest, NumNodes).
-
-
-gen_file(Data) ->
-    <<0:32/?UINT,(gen_file(Data,<<>>,0))/binary>>.
-
-gen_file([], Index, Counter) ->
+gen_file([], Index) ->
     Index;
 gen_file([#node{type = Type,
 		data = Data,
-		children = Children}|Nodes], Index, Counter) ->
-    Children2 = gen_file(Children, <<>>, 0),
+		children = Children}|Nodes], Index) ->
     gen_file(Nodes,
-	     <<Index/binary,?NODE_START:8/?UINT,Type/binary,
-	      Data/binary,Children2/binary,?NODE_END:8/?UINT>>,
-	     Counter+1).
+	     <<Index/binary,
+	      ?NODE_START,
+	      Type,
+	      (gen_data(Data))/binary,
+	      (gen_file(Children, <<>>))/binary,
+	      ?NODE_END>>).
+
+
+gen_data(Data) ->
+    gen_data(Data, <<>>).
+
+gen_data(<<?NODE_END,Rest/binary>>, Acc) ->
+    gen_data(Rest, <<Acc/binary,?ESCAPE_CHAR,?NODE_END>>);
+gen_data(<<?NODE_START,Rest/binary>>, Acc) ->
+    gen_data(Rest, <<Acc/binary,?ESCAPE_CHAR,?NODE_START>>);
+gen_data(<<?ESCAPE_CHAR,Rest/binary>>, Acc) ->
+    gen_data(Rest, <<Acc/binary,?ESCAPE_CHAR,?ESCAPE_CHAR>>);
+gen_data(<<>>, Acc) ->
+    Acc;
+gen_data(<<Byte,Rest/binary>>, Acc) ->
+    gen_data(Rest, <<Acc/binary,Byte>>).
+
+
+
+
+    

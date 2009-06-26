@@ -67,123 +67,67 @@
 
 -define(ITEM_ATTR_LAST,16#2D).
 
-
--record(header, {major_version,
-		 minor_version,
-		 build_number,
-		 csd_version}).
-
--record(item, {type,
-	       flags,
-	       attributes}).
-
--record(attributes, {id,
-		     client_id,
-		     speed,
-		     light,
-		     always_on_top}).
+-record(item_type, {type,
+		    server_id,
+		    client_id,
+		    speed,
+		    light_level,
+		    light_color,
+		    always_on_top_order}).
 
 -define(FLAG_SIZE, 4).
 -define(ATTR_SIZE, 1).
 -define(DATALEN_SIZE, 2).
 
-load() ->
+test() ->
     load("items.otb").
 
-load(Filename) ->
-    {ok, Device} = file:open(Filename, [read,raw,binary]),
-    {_,Pos} = get_child_node(Device, 0),
-    _Flags = pread_int(Device, Pos, ?FLAG_SIZE), 
-    1 = pread_int(Device, Pos+?FLAG_SIZE, ?ATTR_SIZE),
-    Pos2 = Pos+?FLAG_SIZE+?ATTR_SIZE,
-    140 = pread_int(Device, Pos2, ?DATALEN_SIZE),
-    Header = parse_header(pread(Device, Pos2+2, 140)),
 
-    ChildNode = get_child_node(Device, Pos2+142),
-    parse_items(Device, ChildNode).
-	    
-%%    io:format("~p\n", [pread(Device,Pos,40)]).
+load(File) ->
+    Node = tibia_files:parse(File),
+    parse_items(Node).
 
 
 
-parse_items(Device, ChildNode) ->
-    parse_items(Device, ChildNode, []).
+parse_items(#node{type = 0,
+		  data = <<_:32/?UINT,
+			  ?ROOT_ATTR_VERSION,
+			  140:16/?UINT,
+			  _MajorVersion:32/?UINT,
+			  _MinorVersion:32/?UINT,
+			  _BuildNumber:32/?UINT,
+			  _CSDVersion:128/binary>>,
+		  children = Children}) ->
+    parse_items(Children, []).
 
-parse_items(Device, {Type, Pos}, Items) when Pos < 1000 ->
-    Flags = pread_int(Device, Pos, ?FLAG_SIZE), 
-    Attr = pread_int(Device, Pos+4, ?ATTR_SIZE),
-    Pos2 = Pos+5,
-    {Attributes, Pos3} = parse_attributes(Device, Pos2+?FLAG_SIZE,
-					  #attributes{}),
-    parse_items(Device, Pos3,
-		[#item{type = Type,
-		       flags = pread_int(Device, Pos2,?FLAG_SIZE),
-		       attributes = Attributes}|Items]);
-parse_items(_,_,Items) ->
-    Items.
+parse_items([#node{type = Type,
+		   data = <<Flags:32/?UINT,Rest/binary>>,
+		   children = Children} | Nodes], Items) ->
+    parse_items(Nodes, [get_attributes(Rest, #item_type{type=Type})|Items]);
+parse_items([], Items) ->
+    lists:reverse(Items).
 
-parse_attributes(Device, Pos, A) ->
-    Attr = pread_int(Device, Pos, ?ATTR_SIZE),
-    DataLen = pread_int(Device, Pos+?ATTR_SIZE, ?DATALEN_SIZE),
-    Pos2 = Pos+?ATTR_SIZE+?DATALEN_SIZE,
-    case Attr of
-	255 -> io:format("~p\n", [pread(Device, Pos2-1, 50)]),{A, get_child_node(Device, Pos)};
-	?ITEM_ATTR_SERVERID ->
-	    ServerID = pread_int(Device, Pos2, 2),
-	    A2 = if ServerID > 20000,
-		    ServerID < 20100 ->
-			 A#attributes{id = ServerID - 20000};
-		    true -> 
-			 A#attributes{id = ServerID}
-		 end,
-	    parse_attributes(Device, Pos+2, A2);
-	?ITEM_ATTR_CLIENTID ->
-	    ClientID = pread_int(Device, Pos2, 2),
-	    A2 = A#attributes{client_id = ClientID},
-	    parse_attributes(Device, Pos2+2, A2);
-	?ITEM_ATTR_SPEED ->
-	    Speed = pread_int(Device, Pos2, 2),
-	    A2 = A#attributes{speed = Speed},
-	    parse_attributes(Device, Pos2+2, A2);
-	?ITEM_ATTR_LIGHT2 ->
-	    <<LightLevel:16/?UINT,
-	     LightColor:16/?UINT>> = pread(Device,Pos2, 4),
-	    A2 = A#attributes{light = {LightLevel, LightColor}},
-	    parse_attributes(Device, Pos2+4, A2);
-	?ITEM_ATTR_TOPORDER ->
-	    V = pread_int(Device, Pos2, 1),
-	    A2 = A#attributes{always_on_top = V},
-	    parse_attributes(Device, Pos2+4, A2);
-	_ ->
-	    io:format("~p\n", [Attr]),
-	    parse_attributes(Device, Pos2+DataLen, A)
-    end.
 
-    
-    
-parse_header(<<MajorVersion:32/?UINT,MinorVersion:32/?UINT,
-	      BuildNumber:32/?UINT,CSDVersion:128/binary>>) ->
-    #header{major_version = MajorVersion,
-	    minor_version = MinorVersion,
-	    build_number = BuildNumber,
-	    csd_version = CSDVersion}.
+get_attributes(<<>>, Item) ->
+    Item;
+get_attributes(<<?ITEM_ATTR_SERVERID,2:16/?UINT,ServerId:16/?UINT,Rest/binary>>, ItemType) ->
+    get_attributes(Rest,ItemType#item_type{server_id = ServerId});
+get_attributes(<<?ITEM_ATTR_CLIENTID,2:16/?UINT,ClientId:16/?UINT,Rest/binary>>, ItemType) ->
+    get_attributes(Rest,ItemType#item_type{client_id = ClientId});
+get_attributes(<<?ITEM_ATTR_SPEED,2:16/?UINT,Speed:16/?UINT,Rest/binary>>, ItemType) ->
+    get_attributes(Rest,ItemType#item_type{speed = Speed});
+get_attributes(<<?ITEM_ATTR_LIGHT2,4:16/?UINT,
+		LightLevel:16/?UINT,
+		LightColor:16/?UINT,
+		Rest/binary>>, ItemType) ->
+    get_attributes(Rest,ItemType#item_type{light_color = LightColor,
+					   light_level = LightLevel});
+get_attributes(<<?ITEM_ATTR_TOPORDER,1:16/?UINT,TopOrder,Rest/binary>>, ItemType) ->
+    get_attributes(Rest,ItemType#item_type{always_on_top_order = TopOrder});
+get_attributes(<<_,Len:16/?UINT,_:Len/binary,Rest/binary>>, ItemType) ->
+    get_attributes(Rest,ItemType).
 
-get_child_node(Device, Pos) ->
-    Pos2 = get_child_node_pos(Device, Pos),
-    {pread_int(Device, Pos2, 1), Pos2+1}.
 
-get_child_node_pos(Device, Pos) ->
-    case pread_int(Device, Pos, 1) of
-	254 ->
-	    Pos+1;
-	_ ->
-	    get_child_node_pos(Device, Pos+1)
-    end.
 
-pread_int(Device, Pos, NumBytes) ->
-    Bytes = NumBytes*8,
-    {ok, <<Data:Bytes/?UINT>>} = file:pread(Device, Pos, NumBytes),
-    Data.
-pread(Device, Pos, NumBytes) ->
-    {ok, Data} = file:pread(Device, Pos, NumBytes),
-    Data.
+
+
