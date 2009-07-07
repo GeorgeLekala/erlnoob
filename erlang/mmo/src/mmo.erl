@@ -26,6 +26,7 @@
 		timer,
 		image,
 		pos,
+		current_pos,
 		scale,
 		size}).
 
@@ -38,7 +39,7 @@ start_link() ->
 
 init([]) ->
     wx:new(),
-    Frame = wxFrame:new(wx:null(), ?wxID_ANY, "Test", [{size, {800,648}}]),
+    Frame = wxFrame:new(wx:null(), ?wxID_ANY, "Test", [{size, {900,748}}]),
     Attrs = [{attribList, [?WX_GL_RGBA,?WX_GL_DOUBLEBUFFER]}],
     Canvas = wxGLCanvas:new(Frame, Attrs),
     init_frame(Frame),
@@ -69,7 +70,15 @@ init([]) ->
     wxWindow:setFocus(Canvas),
     self() ! repaint,
     {Frame, #state{canvas = Canvas, frame = Frame,
-		  pos= {}, size = {70*8,20*6},scale = true}}.
+		   pos= [{{0,0}},{{1,0}},{{2,0}},{{3,0}},{{4,0}},{{5,0}},{{6,0}},{{7,0}},{{8,0}},
+			 {{0,1}},{{1,1}},{{2,1}},{{3,1}},{{4,1}},{{5,1}},{{6,1}},{{7,1}},{{8,1}},
+			 {{0,2}},{{1,2}},{{2,2}},{{3,2}},{{4,2}},{{5,2}},{{6,2}},{{7,2}},{{8,2}},
+			 {{0,3}},{{1,3}},{{2,3}},{{3,3}},        {{5,3}},{{6,3}},{{7,3}},{{8,3}},
+			 {{0,4}},{{1,4}},{{2,4}},{{3,4}},{{4,4}},{{5,4}},{{6,4}},{{7,4}},{{8,4}},
+			 {{0,5}},{{1,5}},{{2,5}},{{3,5}},{{4,5}},{{5,5}},{{6,5}},{{7,5}},{{8,5}},
+			 {{0,6}},{{1,6}},{{2,6}},{{3,6}},{{4,6}},{{5,6}},{{6,6}},{{7,6}},{{8,6}}],
+		   size = {100,100},scale = true,
+		   current_pos = {4,3}}}.
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -79,7 +88,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(repaint, State) ->
-    repaint(State#state.canvas, {200,200}),
+    repaint(State),
     {noreply, State#state{}}.
 
 handle_event(#wx{id = Id,event = #wxCommand{type = command_menu_selected}},
@@ -94,7 +103,7 @@ handle_event(#wx{event = #wxSize{size = {W,H}}}, State) ->
     gl:loadIdentity(),
     gl:viewport(0,0,W,H),
     glu:perspective(45,1.0*W/H,1,100),
-    repaint(State#state.canvas, {200,200}),
+    repaint(State),
     {noreply, State#state{}};
 handle_event(#wx{event = #wxMouse{type = left_down}},
 	     State = #state{}) ->
@@ -106,10 +115,22 @@ handle_event(#wx{event = #wxMouse{type = left_up}}, State) ->
 handle_event(#wx{event = #wxMouse{type = motion}},
 	     State = #state{scale = true}) ->
     {noreply, State#state{}};
-handle_event(#wx{event = #wxKey{keyCode = Key}}, State) ->
+handle_event(#wx{event = #wxKey{keyCode = Key}}, State=#state{pos = Pos,current_pos = {X,Y}}) ->
     case Key of
 	27 ->
 	    {stop, normal, State};
+	?WXK_LEFT ->
+	    NewPos = lists:keystore({X-1,Y}, 1, Pos, {{X,Y}}),
+	    {noreply, State#state{pos = NewPos, current_pos = {X-1,Y}}};
+	?WXK_RIGHT ->
+	    NewPos = lists:keystore({X+1,Y}, 1, Pos, {{X,Y}}),
+	    {noreply, State#state{pos = NewPos, current_pos = {X+1,Y}}};
+	?WXK_DOWN ->
+	    NewPos = lists:keystore({X,Y+1}, 1, Pos, {{X,Y}}),
+	    {noreply, State#state{pos = NewPos, current_pos = {X,Y+1}}};
+	?WXK_UP ->
+	    NewPos = lists:keystore({X,Y-1}, 1, Pos, {{X,Y}}),
+	    {noreply, State#state{pos = NewPos, current_pos = {X,Y-1}}};
 	_ ->
 	    {noreply, State}
     end;
@@ -125,47 +146,34 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Local functions
 
-repaint(Canvas, {W,H}) ->
-    TexId = load_image("../images/test.png", [{wrap_s, ?GL_REPEAT}]),
-    IdMatrix = {0.08,1.0,1.0,1.0,
-		1.0,1.0,1.0,1.0, 
-		1.0,1.0,1.0,1.0,
-		1.0,1.0,1.0,1.0},
+repaint(State) ->
+    {W,H} = State#state.size,
     gl:clear(?GL_COLOR_BUFFER_BIT),
     Fun =
-	fun({X,Y}) ->
+	fun({{X,Y}}) ->
 		%%gl:pushMatrix(),
 		gl:loadIdentity(),
-		gl:enable(?GL_TEXTURE_2D),
-		gl:bindTexture(?GL_TEXTURE_2D, TexId),		   
-		gl:matrixMode(?GL_TEXTURE),
-		gl:loadMatrixf(IdMatrix),
 		gl:translatef(X*H,Y*H,0),
 		gl:'begin'(?GL_QUADS),
-		%%gl:color3f(0.0,1.0,0.0),
+		gl:color3f(0.0,1.0,0.0),
 		gl:texCoord2f(0,0),
 		gl:vertex2i(0,0),
-		%%gl:color3f(0.0,0.0,1.0),
+		gl:color3f(0.0,0.0,1.0),
 		gl:texCoord2f(W,0),
 		gl:vertex2i(W,0),
-		%%gl:color3f(1.0,0.0,0.0),
+		gl:color3f(1.0,0.0,0.0),
 		gl:texCoord2f(W,H),
 		gl:vertex2i(W,H),
-		%%gl:color3f(1.0,1.0,1.0),
+		gl:color3f(1.0,1.0,1.0),
 		gl:texCoord2f(0,H),
 		gl:vertex2i(0,H),
 		gl:'end'()
 		%%gl:popMatrix()
 	end,
-    Fun({0.0,0.0}),
-%%     wx:foreach(Fun, [{0,0},{1,0},{2,0},{3,0},{4,0},{5,0},{6,0},{7,0},
-%% 		     {0,1},{1,1},{2,1},{3,1},{4,1},{5,1},{6,1},{7,1},
-%%  		     {0,2},{1,2},{2,2},{3,2},{4,2},{5,2},{6,2},{7,2},
-%%  		     {0,3},{1,3},{2,3},{3,3},{4,3},{5,3},{6,3},{7,3},
-%%  		     {0,4},{1,4},{2,4},{3,4},{4,4},{5,4},{6,4},{7,4},
-%% 		     {0,5},{1,5},{2,5},{3,5},{4,5},{5,5},{6,5},{7,5}]),
+    wx:foreach(Fun, State#state.pos),
 
-    wxGLCanvas:swapBuffers(Canvas).
+    wxGLCanvas:swapBuffers(State#state.canvas).
+
 
     
 

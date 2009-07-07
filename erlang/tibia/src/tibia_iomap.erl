@@ -64,9 +64,6 @@
 
 
 
--record(map, {header,
-	      data}).
-
 -record(header, {description,
 		 spawn_file,
 		 house_file,
@@ -76,63 +73,41 @@
 		 major_version_items,
 		 minor_version_items}).
 
--record(tile, {x,y,z,
-	       type,
-	       house_id,
-	       items,
-	       flags}).
--record(item, {id,
-	       flags,
-	       unique_id,
-	       action_id,
-	       name,
-	       plural_name,
-	       article,
-	       attack,
-	       extra_attack,
-	       defense,
-	       extra_defense,
-	       armor,
-	       attack_speed,
-	       hit_chance,
-	       text,
-	       written_date,
-	       written_by,
-	       special_description,
-	       rune_charges,
-	       charges,
-	       duration,
-	       decaying_state,
-	       tele_destination,
-	       count}).
 
 
-load() ->
-    load("test.otbm").
+test() ->
+    tibia_items:test(),
+    load("test.otbm"),
+    A = ets:lookup(map,#coord{x=4,y=4,z=7}),
+    ets:delete(items),
+    ets:delete(item_types),
+    ets:delete(map),
+    A.
 
-load(Filename) ->
-    Data = open(Filename),
-    {Header,Data2} = get_header(Data),
-    
-    #map{header = Header,
-	 data = Data2},
-    file:write_file("test.log", io_lib:format("~p", [load_map(Data2)])).
 
-open(Filename) ->	
-    {ok, File} = file:read_file(Filename),
-    tibia_files:parse_file(File).
+load(File) ->
+    io:format("Loading map: ~p\n", [File]),
+    ets:new(map, [{keypos, #tile.coord},
+		    set,
+		    protected,
+		    named_table]),
+    Data = tibia_files:parse(File),
+    load_map(Data).
+
 
 
 
 
 load_map(Nodes) ->
-    load_map(Nodes, []).
+    {Header,Nodes2} = get_header(Nodes),
+    load_map(Nodes2, []),
+    Header.
 
 load_map([], Acc) ->
     lists:reverse(lists:flatten(Acc));
 load_map([#node{type = ?OTBM_TILE_AREA,data = Data,children = Children}|Nodes], Acc) ->
     <<X:16/?UINT,Y:16/?UINT,Z:8/?UINT>> = Data,
-    Base = #tile{x=X,y=Y,z=Z},
+    Base = #coord{x=X,y=Y,z=Z},
     Tiles = get_tiles(Children,Base),
     load_map(Nodes, [Tiles|Acc]);
 load_map([#node{type = ?OTBM_TOWNS}|Nodes], Acc) ->
@@ -150,25 +125,29 @@ get_tiles([], _Base, Acc) ->
 get_tiles([#node{type = ?OTBM_TILE,data = Data,children = Children}|Tiles], Base, Acc) ->
     try <<X:8/?UINT,Y:8/?UINT,Rest/binary>> = Data,
 	Attributes = get_tile_attributes(Rest),
-	get_tiles(Tiles,Base,[#tile{x = Base#tile.x + X,
-				    y = Base#tile.y + Y,
-				    z = Base#tile.z,
-				    type  = proplists:get_value(item, Attributes),
-				    items = get_items(Children),
-				    flags = proplists:get_value(flags, Attributes)}|Acc])
-    catch _:_ -> get_tiles(Tiles, Base, Acc)
+	true=ets:insert(map,#tile{coord = #coord{x = Base#coord.x + X,
+						 y = Base#coord.y + Y,
+						 z = Base#coord.z},
+				  type  = proplists:get_value(item, Attributes),
+				  items = get_items(Children),
+				  flags = proplists:get_value(flags, Attributes)}),
+	get_tiles(Tiles,Base,Acc)
+    catch _:Reason -> throw({{error,Reason}, [{get_tiles, 'OTBM_TILE'},
+					      {base, Base}]})
     end;
 get_tiles([#node{type = ?OTBM_HOUSETILE,data = Data,children = Children}|Tiles], Base, Acc) ->
     try <<X:8/?UINT,Y:8/?UINT,HouseId:32/?UINT,Rest/binary>> = Data,
 	Attributes = get_tile_attributes(Rest),
-	get_tiles(Tiles,Base,[#tile{x = Base#tile.x + X,
-				    y = Base#tile.y + Y,
-				    z = Base#tile.z,
-				    house_id = HouseId,
-				    type  = proplists:get_value(item, Attributes),
-				    items = get_items(Children),
-				    flags = proplists:get_value(flags, Attributes)}|Acc])
-    catch _:_ -> get_tiles(Tiles, Base, Acc)
+	true=ets:insert(map, #tile{coord = #coord{x = Base#coord.x + X,
+						  y = Base#coord.y + Y,
+						  z = Base#coord.z},
+				   house_id = HouseId,
+				   type  = proplists:get_value(item, Attributes),
+				   items = get_items(Children),
+				   flags = proplists:get_value(flags, Attributes)}),
+	get_tiles(Tiles,Base,Acc)
+    catch _:Reason -> throw({{error,Reason}, [{get_tiles, 'OTBM_HOUSETILE'},
+					      {base, Base}]})
     end;
 get_tiles([#node{}|Tiles], Base,Acc) ->
     get_tiles(Tiles, Base, Acc).
@@ -185,13 +164,12 @@ get_tile_attributes(<<Attr:8/?UINT,Rest/binary>>, Acc) ->
     case Attr of
 	?OTBM_ATTR_ITEM ->
 	    <<ItemID:16/?UINT,Rest2/binary>> = Rest,
-	    get_tile_attributes(Rest2, [{item, #item{id = ItemID}}|Acc]);
+	    get_tile_attributes(Rest2, [{item,  ItemID}|Acc]);
 	?OTBM_ATTR_TILE_FLAGS ->
 	    <<Flags:32/?UINT,Rest2/binary>> = Rest,
 	    get_tile_attributes(Rest2, [{flags, Flags}|Acc]);
 	_ ->
-	    io:format("~p\n", [Attr]),
-	    get_tile_attributes(Rest,Acc)
+	    throw({incorrent_tile_attribute, Attr})
     end.
 
 get_items(Nodes) ->
@@ -201,91 +179,90 @@ get_items(undefined, Acc) ->
     Acc;
 get_items([], Acc) ->
     Acc;
-get_items([#node{type = ?OTBM_ITEM,data = Data}|Nodes], Acc) ->
-    try <<Id:16/?UINT,Rest/binary>> = Data,
-	case Rest of
-	    <<>> ->
-		get_items(Nodes, [#item{id = Id}|Acc]);
-	    _ ->
-		Item = get_item_attributes(#item{id = Id},Rest),
-		get_items(Nodes, [Item|Acc])
-	end
+get_items([#node{type = ?OTBM_ITEM,
+		 data = <<Id:16/?UINT,Rest/binary>>,
+		 children = Children}|Nodes], Acc) ->
+    try [#item_type{server_id = Id}] = ets:lookup(item_types, Id),
+	[#item{id = Id}] = ets:lookup(items, Id),
+	get_items(Nodes, [#map_item{id = Id,
+				    attributes = get_item_attributes(Rest, []),
+				    content = get_items(Children)}|Acc])
     catch _:_ ->
-	  get_items(Nodes, Acc)
+	    throw({item_doesnt_exist, Id})
     end;
-get_items([#node{}|Nodes], Acc) ->
-    get_items(Nodes,Acc).
+get_items([#node{type = Type}|_], _) ->
+    throw({get_items, [{unknown_type, Type}]}).
 
-get_item_attributes(Item, <<>>)  ->
-    Item;
-get_item_attributes(Item, <<Attr:8/?UINT,Rest/binary>>)  ->
+get_item_attributes(<<>>, Attributes)  ->
+    Attributes;
+get_item_attributes(<<Attr:8/?UINT,Rest/binary>>, Attributes)  ->
     case Attr of
 	?OTBM_ATTR_COUNT ->
 	    <<Count:8/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{count = Count}, Rest2);
+	    get_item_attributes(Rest2, [{count, Count}|Attributes]);
 	?OTBM_ATTR_ACTION_ID ->
 	    <<ActionId:16/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{action_id = ActionId}, Rest2);
+	    get_item_attributes(Rest2, [{action_id, ActionId}|Attributes]);
 	?OTBM_ATTR_UNIQUE_ID ->
 	    <<UniqueId:16/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{unique_id = UniqueId}, Rest2);
+	    get_item_attributes(Rest2, [{unique_id, UniqueId}|Attributes]);
 	?OTBM_ATTR_NAME ->
 	    <<Len:16/?UINT,Name:Len/binary,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{name = Name}, Rest2);
+	    get_item_attributes(Rest2, [{name, Name}|Attributes]);
 	?OTBM_ATTR_PLURALNAME ->
 	    <<Len:16/?UINT,PluralName:Len/binary,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{plural_name = PluralName}, Rest2);
+	    get_item_attributes(Rest2, [{plural_name, PluralName}|Attributes]);
 	?OTBM_ATTR_ARTICLE ->
 	    <<Len:16/?UINT,Article:Len/binary,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{article = Article}, Rest2);
+	    get_item_attributes(Rest2, [{article, Article}|Attributes]);
 	?OTBM_ATTR_ATTACK ->
 	    <<Attack:32/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{attack = Attack}, Rest2);
+	    get_item_attributes(Rest2, [{attack, Attack}|Attributes]);
 	?OTBM_ATTR_EXTRAATTACK ->
 	    <<ExtraAttack:32/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{extra_attack = ExtraAttack}, Rest2);
+	    get_item_attributes(Rest2, [{extra_attack, ExtraAttack}|Attributes]);
 	?OTBM_ATTR_DEFENSE ->
 	    <<Defense:32/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{defense = Defense}, Rest2);
+	    get_item_attributes(Rest2, [{defense, Defense}|Attributes]);
 	?OTBM_ATTR_EXTRADEFENSE ->
 	    <<ExtraDefense:32/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{extra_defense = ExtraDefense}, Rest2);
+	    get_item_attributes(Rest2, [{extra_defense, ExtraDefense}|Attributes]);
 	?OTBM_ATTR_ARMOR ->
 	    <<Armor:32/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{armor = Armor}, Rest2);
+	    get_item_attributes(Rest2, [{armor, Armor}|Attributes]);
 	?OTBM_ATTR_ATTACKSPEED ->
 	    <<AttackSpeed:32/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{attack_speed = AttackSpeed}, Rest2);
+	    get_item_attributes(Rest2, [{attack_speed, AttackSpeed}|Attributes]);
 	?OTBM_ATTR_HITCHANCE ->
 	    <<HitChance:32/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{hit_chance = HitChance}, Rest2);
+	    get_item_attributes(Rest2, [{hit_chance, HitChance}|Attributes]);
 	?OTBM_ATTR_TEXT ->
 	    <<Len:16/?UINT,Text:Len/binary,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{text = Text}, Rest2);
+	    get_item_attributes(Rest2, [{text, Text}|Attributes]);
 	?OTBM_ATTR_WRITTENDATE ->
 	    <<WrittenDate:32/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{written_date = WrittenDate}, Rest2);
+	    get_item_attributes(Rest2, [{written_date, WrittenDate}|Attributes]);
 	?OTBM_ATTR_WRITTENBY ->
 	    <<Len:16/?UINT,WrittenBy:Len/binary,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{written_by = WrittenBy}, Rest2);
+	    get_item_attributes(Rest2, [{written_by, WrittenBy}|Attributes]);
 	?OTBM_ATTR_DESC ->
 	    <<Len:16/?UINT,SpecialDescription:Len/binary,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{special_description = SpecialDescription}, Rest2);
+	    get_item_attributes(Rest2, [{special_description, SpecialDescription}|Attributes]);
 	?OTBM_ATTR_RUNE_CHARGES ->
 	    <<RuneCharges:8/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{rune_charges = RuneCharges}, Rest2);
+	    get_item_attributes(Rest2, [{rune_charges, RuneCharges}|Attributes]);
 	?OTBM_ATTR_CHARGES ->
 	    <<Charges:16/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{charges = Charges}, Rest2);
+	    get_item_attributes(Rest2, [{charges, Charges}|Attributes]);
 	?OTBM_ATTR_DURATION ->
 	    <<Duration:32/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{duration = Duration}, Rest2);
+	    get_item_attributes(Rest2, [{duration, Duration}|Attributes]);
 	?OTBM_ATTR_DECAYING_STATE ->
 	    <<State:8/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{decaying_state = State}, Rest2);
+	    get_item_attributes(Rest2, [{decaying_state, State}|Attributes]);
 	?OTBM_ATTR_TELE_DEST ->
 	    <<X:16/?UINT,Y:16/?UINT,Z:8/?UINT,Rest2/binary>> = Rest,
-	    get_item_attributes(Item#item{tele_destination = #tile{x=X,y=Y,z=Z}}, Rest2)
+	    get_item_attributes(Rest2, [{tele_destination, #coord{x=X,y=Y,z=Z}}|Attributes])
 	    
     end.
 
@@ -294,14 +271,14 @@ get_item_attributes(Item, <<Attr:8/?UINT,Rest/binary>>)  ->
 
 
 
-get_header([#node{type = 0,
-		  data = <<Version:32/?UINT,
-			  Width:16/?UINT,Height:16/?UINT,
-			  MajorVersionItems:32/?UINT,
-			  MinorVersionItems:32/?UINT>>,
-		  children = [#node{type = 2,
-				    data = Data,
-				    children = Children}|_]}|_]) ->
+get_header(#node{type = 0,
+		 data = <<Version:32/?UINT,
+			 Width:16/?UINT,Height:16/?UINT,
+			 MajorVersionItems:32/?UINT,
+			 MinorVersionItems:32/?UINT>>,
+		 children = [#node{type = 2,
+				   data = Data,
+				   children = Children}|_]}) ->
     {List, _} = parse_header(Data),
     {#header{description = proplists:get_value(description, List),
 	     spawn_file = proplists:get_value(spawn_file, List),

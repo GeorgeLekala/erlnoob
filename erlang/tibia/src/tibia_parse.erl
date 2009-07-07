@@ -21,6 +21,7 @@ parse_server_packet(State,Packet = <<Checksum:32/?UINT,Msg/binary>>) ->
     Reply =
 	case Protocol of
 	    16#14 ->
+		io:format("~p\n", [State#state.account]),
 		modify_login_packet(State#state.key,Message);
 	    _ ->
 		<<(size(Packet)):16/?UINT,Packet/binary>>
@@ -41,15 +42,15 @@ modify_login_packet(Key, <<MotdSize:16/?UINT,Motd:MotdSize/binary,
     
 
 build_characters(Chars) ->
-    build_characters(Chars, <<>>).
+    build_characters(Chars, <<(length(Chars)):8/?UINT>>).
 
-build_characters([#character{name = Name,
-			     server_name = ServerName}|Chars], Acc) ->
-    build_characters(Chars, <<(size(Name)):16/?UINT,Name/binary,
-			     (size(ServerName)):16/?UINT,ServerName/binary,
-			     (list_to_binary([127,0,0,1]))/binary,7172:16/?UINT,Acc/binary>>);
+build_characters([#player{name = Name}|Chars], Acc) ->
+    build_characters(Chars, <<Acc/binary,(length(Name)):16/?UINT,
+			     (list_to_binary(Name))/binary,
+			     (byte_size(<<"powerflip">>)):16/?UINT,(<<"powerflip">>)/binary,
+			     (list_to_binary([127,0,0,1]))/binary,7172:16/?UINT>>);
 build_characters([], Acc) ->
-    Acc.
+    <<(byte_size(Acc)+3):16/?UINT,16#64:8/?UINT,Acc/binary,20:16/?UINT>>.
     
 get_characters(NumChars,Chars) ->
     get_characters(NumChars, Chars, []).
@@ -70,20 +71,47 @@ parse_client_packet(State, Packet) when State#state.account =:= undefined ->
      _Version:16/?UINT,Msg/binary>> = Packet,
     case ProtocolId of
 	?LOGIN_PROTOCOL ->
-	    tibia_login:parse_login_package(State, Msg);
+	    {State2, Reply} = tibia_login:parse_login_package(State, Msg),
+	    gen_tcp:send(State2#state.client_socket, Reply),
+	    State2;
 	?GAME_PROTOCOL ->
-	    tibia_login:parse_first_game_packet(State, Msg);
+	    {State2, Reply} = tibia_login:parse_first_game_packet(State, Msg),
+	    gen_tcp:send(State2#state.client_socket, Reply),
+	    State2;
 	_ ->
+	    io:format("Other protocol: ~p\n", [ProtocolId]),
 	    State
     end;
 parse_client_packet(State, <<Checksum:32/?UINT,Msg/binary>>) ->
-    Msg2 = xtea:decrypt(State#state.key, Msg),
-    io:format("Msg: ~p\n", [Msg2]),
+    Decrypted = xtea:decrypt(State#state.key, Msg),
+    <<Size:16/?UINT, Msg2:Size/binary,_/binary>> = Decrypted,
+    <<RecvByte, Data/binary>> = Msg2,
+    case RecvByte of
+	16#14 ->
+	    gen_tcp:close(State#state.client_socket),
+	    exit({logout, (State#state.account)#account.name});
+	16#a0 ->
+	    ok;
+	Dir when Dir >= 16#6F, Dir =< 16#72 ->
+	    Turn =
+		tibia_message:creature_turn(268436457,
+					    #coord{x=4,y=4,z=7},
+					    Dir - 16#6F),
+	    Reply = prepare_send(State#state.key,Turn),
+	    gen_tcp:send(State#state.client_socket,
+			 Reply);
+	_ ->
+	    io:format("Msg: ~p\n", [Decrypted])
+    end,
     State.
 
 
 
-
+prepare_send(Key, Bin) when is_binary(Bin) ->
+    Encrypted = xtea:encrypt(Key, <<(byte_size(Bin)):16/?UINT,Bin/binary>>),
+    <<(byte_size(Encrypted)+4):16/?UINT,
+     (erlang:adler32(Encrypted)):32/?UINT,
+     Encrypted/binary>>.
 
 
 test(Key,
