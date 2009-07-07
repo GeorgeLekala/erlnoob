@@ -18,11 +18,17 @@
 -define(LOGIN_PROTOCOL, 16#01).
 -define(GAME_PROTOCOL, 16#0A).
 
+-define(NODE_START, 254).
+-define(NODE_END, 255).
+-define(ESCAPE_CHAR, 253).
+
+
 
 -record(state, {server_socket,
 		client_socket,
 		key,
-		account}).
+		account,
+		server_pid}).
 -record(key, {k1,k2,k3,k4}).
 
 -record(tries, {ip,tries}).
@@ -31,79 +37,42 @@
 	       data = <<>>,
 	       children = []}).
 
--record(account, {id,
-		  name,
-		  password,
-		  premdays,
-		  lastday,
-		  email,
-		  key,
-		  blocked,
-		  warnings,
-		  group_id,
-		  page_lastday,
-		  email_new,
-		  email_new_time,
-		  created,
-		  rlname,
-		  location,
-		  page_access,
-		  email_code,
-		  next_email,
-		  premium_points}).
+-record(item, {id,
+	       name,
+	       article,
+	       plural,
+	       attributes}).
+
+-record(map_item, {id,
+		   attributes,
+		   content}).
+
+-record(item_type, {type,
+		    flags,
+		    server_id,
+		    client_id,
+		    ground_speed,
+		    name,
+		    sprite_hash,
+		    minimap_color,
+		    sub_param_7,
+		    sub_param_8,
+		    light_level,
+		    light_color,
+		    always_on_top_order}).
+
+-record(coord, {x,y,z}).
+
+-record(tile, {coord = #coord{},
+	       type,
+	       house_id,
+	       items,
+	       flags}).
 
 
-
--record(player, {id,
+-record(account, {name, password}).
+-record(player, {account,
+		 pos,
 		 name,
-		 world_id,
-		 group_id,
-		 account_id,
-		 level,
-		 vocation,
-		 health,
-		 healthmax,
-		 experience,
-		 lookbody,
-		 lookfeet,
-		 lookhead,
-		 looklegs,
-		 looktype,
-		 lookaddons,
-		 maglevel,
-		 mana,
-		 manamax,
-		 manaspent,
-		 soul,
-		 town_id,
-		 posx,
-		 posy,
-		 posz,
-		 conditions,
-		 cap,
-		 sex,
-		 lastlogin,
-		 lastip,
-		 save,
-		 redskull,
-		 redskulltime,
-		 rank_id,
-		 guildnick,
-		 lastlogout,
-		 blessings,
-		 balance,
-		 stamina,
-		 direction,
-		 loss_experience,
-		 loss_mana,
-		 loss_skills,
-		 loss_items,
-		 premend,
-		 online,
-		 marriage,
-		 promotion,
-		 deleted,
-		 created,
-		 nick_verify,
-		 hide_char,
-		 comment}).
+		 id,
+		 direction}).
